@@ -27,6 +27,7 @@ import com.devtrack.viewmodel.TodayViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Today screen composable (P1.4.4).
@@ -37,6 +38,8 @@ fun TodayScreen(viewModel: TodayViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    // Stable map of expanded subtask sections — survives loadTasks() recomposition
+    val expandedTaskIds = remember { mutableStateMapOf<UUID, Boolean>() }
 
     // Show snackbar when snackbarMessage is set
     LaunchedEffect(uiState.snackbarMessage) {
@@ -157,6 +160,7 @@ fun TodayScreen(viewModel: TodayViewModel) {
                                 doneTasks = doneTasks,
                                 activeSession = activeSession,
                                 viewModel = viewModel,
+                                expandedTaskIds = expandedTaskIds,
                             )
                         }
 
@@ -183,6 +187,10 @@ fun TodayScreen(viewModel: TodayViewModel) {
                     onResume = { viewModel.resumeSession() },
                     onStop = { viewModel.stopSession() },
                     onMarkDone = { viewModel.markDone(taskWithTime.task.id) },
+                    onToggleSubTaskDone = { viewModel.toggleSubTaskDone(it) },
+                    onDeleteSubTask = { viewModel.deleteSubTask(it) },
+                    subTasksExpanded = expandedTaskIds[taskWithTime.task.id] == true,
+                    onToggleSubTasksExpanded = { expandedTaskIds[taskWithTime.task.id] = !(expandedTaskIds[taskWithTime.task.id] ?: false) },
                     onClick = { viewModel.openTaskDetail(taskWithTime.task) },
                 )
             }
@@ -406,6 +414,7 @@ private fun DoneSection(
     doneTasks: List<com.devtrack.domain.model.TaskWithTime>,
     activeSession: com.devtrack.domain.model.ActiveSessionState?,
     viewModel: TodayViewModel,
+    expandedTaskIds: MutableMap<UUID, Boolean>,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -451,6 +460,10 @@ private fun DoneSection(
             doneTasks.forEach { taskWithTime ->
                 TaskCard(
                     taskWithTime = taskWithTime,
+                    onToggleSubTaskDone = { viewModel.toggleSubTaskDone(it) },
+                    onDeleteSubTask = { viewModel.deleteSubTask(it) },
+                    subTasksExpanded = expandedTaskIds[taskWithTime.task.id] == true,
+                    onToggleSubTasksExpanded = { expandedTaskIds[taskWithTime.task.id] = !(expandedTaskIds[taskWithTime.task.id] ?: false) },
                     onClick = { viewModel.openTaskDetail(taskWithTime.task) },
                 )
                 Spacer(modifier = Modifier.height(8.dp))

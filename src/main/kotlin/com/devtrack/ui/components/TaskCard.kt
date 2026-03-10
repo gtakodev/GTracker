@@ -1,5 +1,6 @@
 package com.devtrack.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.devtrack.domain.model.TaskCategory
 import com.devtrack.domain.model.TaskLevel
+import com.devtrack.domain.model.Task
 import com.devtrack.domain.model.TaskStatus
 import com.devtrack.domain.model.TaskWithTime
 import com.devtrack.ui.i18n.I18n
@@ -79,10 +81,15 @@ fun TaskCard(
     onResume: () -> Unit = {},
     onStop: () -> Unit = {},
     onMarkDone: () -> Unit = {},
+    onToggleSubTaskDone: ((Task) -> Unit)? = null,
+    onDeleteSubTask: ((Task) -> Unit)? = null,
+    subTasksExpanded: Boolean = false,
+    onToggleSubTasksExpanded: (() -> Unit)? = null,
     onClick: () -> Unit = {},
 ) {
     val task = taskWithTime.task
     val isDone = task.status == TaskStatus.DONE
+    val canManageSubTasks = taskWithTime.subTasks.isNotEmpty() && onToggleSubTaskDone != null && onDeleteSubTask != null
 
     // Pulsating border for active task
     val infiniteTransition = rememberInfiniteTransition()
@@ -159,6 +166,19 @@ fun TaskCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
+                    if (canManageSubTasks) {
+                        IconButton(
+                            onClick = { onToggleSubTasksExpanded?.invoke() },
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (subTasksExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = if (subTasksExpanded) I18n.t("sidebar.collapse") else I18n.t("sidebar.expand"),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
                 }
 
                 // Jira tickets
@@ -177,6 +197,20 @@ fun TaskCard(
 
                 // Sub-task progress indicator (P2.5.2)
                 if (taskWithTime.subTaskCount > 0) {
+                    val targetProgress = taskWithTime.progress?.toFloat() ?: 0f
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = targetProgress,
+                        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
+                        label = "subtaskProgress",
+                    )
+                    val isComplete = taskWithTime.progress == 1.0
+                    val progressColor by animateColorAsState(
+                        targetValue = if (isComplete) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.tertiary,
+                        animationSpec = tween(durationMillis = 350),
+                        label = "subtaskProgressColor",
+                    )
+
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -195,15 +229,33 @@ fun TaskCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         LinearProgressIndicator(
-                            progress = { taskWithTime.progress?.toFloat() ?: 0f },
+                            progress = { animatedProgress },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(4.dp)
                                 .clip(RoundedCornerShape(2.dp)),
-                            color = if (taskWithTime.progress == 1.0) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.tertiary,
+                            color = progressColor,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant,
                         )
+                    }
+                }
+
+                if (canManageSubTasks) {
+                    AnimatedVisibility(visible = subTasksExpanded) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            taskWithTime.subTasks.forEach { subTask ->
+                                TaskCardSubTaskItem(
+                                    subTask = subTask,
+                                    onToggleDone = { onToggleSubTaskDone?.invoke(subTask) },
+                                    onDelete = { onDeleteSubTask?.invoke(subTask) },
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -310,6 +362,54 @@ fun TaskCard(
             }
 
             Spacer(modifier = Modifier.width(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun TaskCardSubTaskItem(
+    subTask: Task,
+    onToggleDone: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val isDone = subTask.status == TaskStatus.DONE
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = isDone,
+                onCheckedChange = { onToggleDone() },
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = subTask.title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(28.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = I18n.t("button.delete"),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }

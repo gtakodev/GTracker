@@ -74,6 +74,20 @@ class MigrationManager(private val databaseFactory: DatabaseFactory) {
                 exec("CREATE INDEX IF NOT EXISTS idx_tasks_display_order ON tasks(display_order);")
             }
         })
+
+        migrations.add(Migration(3, "Add close_to_tray column to user_settings") {
+            transaction(databaseFactory.getDatabase()) {
+                val columnExists = try {
+                    exec("SELECT close_to_tray FROM user_settings LIMIT 1")
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                if (!columnExists) {
+                    exec("ALTER TABLE user_settings ADD COLUMN close_to_tray BOOLEAN NOT NULL DEFAULT 0;")
+                }
+            }
+        })
     }
 
     /**

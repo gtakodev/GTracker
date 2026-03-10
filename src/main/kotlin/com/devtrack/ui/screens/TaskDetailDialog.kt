@@ -1,5 +1,9 @@
 package com.devtrack.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,6 +12,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -335,6 +344,13 @@ private fun SubTaskSection(
     onStartSubTask: (UUID) -> Unit,
 ) {
     var newSubTaskTitle by remember { mutableStateOf("") }
+    val submitSubTask = {
+        val title = newSubTaskTitle.trim()
+        if (title.isNotEmpty()) {
+            onCreateSubTask(title)
+            newSubTaskTitle = ""
+        }
+    }
 
     Column {
         // Section header with progress
@@ -363,13 +379,26 @@ private fun SubTaskSection(
         // Progress bar
         if (subTasks.isNotEmpty()) {
             val doneCount = subTasks.count { it.status == TaskStatus.DONE }
+            val targetProgress = doneCount.toFloat() / subTasks.size
+            val animatedProgress by animateFloatAsState(
+                targetValue = targetProgress,
+                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
+                label = "dialogSubtaskProgress",
+            )
+            val isComplete = doneCount == subTasks.size
+            val progressColor by animateColorAsState(
+                targetValue = if (isComplete) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.tertiary,
+                animationSpec = tween(durationMillis = 350),
+                label = "dialogSubtaskProgressColor",
+            )
+
             LinearProgressIndicator(
-                progress = { doneCount.toFloat() / subTasks.size },
+                progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp),
-                color = if (doneCount == subTasks.size) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.tertiary,
+                color = progressColor,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -394,18 +423,23 @@ private fun SubTaskSection(
                 value = newSubTaskTitle,
                 onValueChange = { newSubTaskTitle = it },
                 placeholder = { Text(I18n.t("subtask.add_placeholder")) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .onPreviewKeyEvent { event ->
+                        if (
+                            event.type == KeyEventType.KeyDown &&
+                            (event.key == Key.Enter || event.key == Key.NumPadEnter)
+                        ) {
+                            submitSubTask()
+                            true
+                        } else false
+                    },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium,
             )
             Spacer(modifier = Modifier.width(8.dp))
             IconButton(
-                onClick = {
-                    if (newSubTaskTitle.isNotBlank()) {
-                        onCreateSubTask(newSubTaskTitle.trim())
-                        newSubTaskTitle = ""
-                    }
-                },
+                onClick = submitSubTask,
                 enabled = newSubTaskTitle.isNotBlank(),
             ) {
                 Icon(

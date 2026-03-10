@@ -58,7 +58,7 @@ class DatabaseIntegrationTest {
         transaction(databaseFactory.getDatabase()) {
             val versions = SchemaVersionTable.selectAll().toList()
             assertTrue(versions.isNotEmpty())
-            assertEquals(2, versions.maxOf { it[SchemaVersionTable.version] })
+            assertEquals(3, versions.maxOf { it[SchemaVersionTable.version] })
         }
     }
 
