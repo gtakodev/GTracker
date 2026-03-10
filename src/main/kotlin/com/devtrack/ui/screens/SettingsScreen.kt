@@ -116,6 +116,39 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Behavior section
+                SettingsSection(
+                    title = I18n.t("settings.section.behavior"),
+                    icon = Icons.Filled.Tune,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = I18n.t("settings.close_to_tray"),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = I18n.t("settings.close_to_tray.hint"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Switch(
+                            checked = uiState.closeToTray,
+                            onCheckedChange = { viewModel.setCloseToTray(it) },
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Timer section
                 SettingsSection(
                     title = I18n.t("settings.section.timer"),

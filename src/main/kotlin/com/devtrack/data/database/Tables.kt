@@ -86,6 +86,7 @@ object Tables {
         val pomodoroBreakMin = integer("pomodoro_break_min").default(5)
         val pomodoroLongBreakMin = integer("pomodoro_long_break_min").default(15)
         val pomodoroSessionsBeforeLong = integer("pomodoro_sessions_before_long").default(4)
+        val closeToTray = bool("close_to_tray").default(false)
 
         override val primaryKey = PrimaryKey(id)
     }

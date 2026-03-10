@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.devtrack.domain.model.TaskCategory
+import com.devtrack.domain.model.Task
 import com.devtrack.domain.model.TaskStatus
 import com.devtrack.domain.model.TaskWithTime
 import com.devtrack.ui.components.TaskCard
@@ -38,6 +39,8 @@ import java.util.UUID
 fun BacklogScreen(viewModel: BacklogViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    // Stable map of expanded subtask sections — survives loadTasks() recomposition
+    val expandedTaskIds = remember { mutableStateMapOf<UUID, Boolean>() }
 
     // Show snackbar when message is set
     LaunchedEffect(uiState.snackbarMessage) {
@@ -134,6 +137,10 @@ fun BacklogScreen(viewModel: BacklogViewModel) {
                             isSelected = taskWithTime.task.id in uiState.selectedTaskIds,
                             onToggleSelection = { viewModel.toggleTaskSelection(taskWithTime.task.id) },
                             onPlanToday = { viewModel.planTaskToday(taskWithTime.task.id) },
+                            onToggleSubTaskDone = { viewModel.toggleSubTaskDone(it) },
+                            onDeleteSubTask = { viewModel.deleteSubTask(it) },
+                            subTasksExpanded = expandedTaskIds[taskWithTime.task.id] == true,
+                            onToggleSubTasksExpanded = { expandedTaskIds[taskWithTime.task.id] = !(expandedTaskIds[taskWithTime.task.id] ?: false) },
                             onClick = { viewModel.openTaskDetail(taskWithTime.task) },
                         )
                     }
@@ -466,6 +473,10 @@ private fun BacklogTaskItem(
     isSelected: Boolean,
     onToggleSelection: () -> Unit,
     onPlanToday: () -> Unit,
+    onToggleSubTaskDone: (Task) -> Unit,
+    onDeleteSubTask: (Task) -> Unit,
+    subTasksExpanded: Boolean,
+    onToggleSubTasksExpanded: () -> Unit,
     onClick: () -> Unit,
 ) {
     Row(
@@ -485,6 +496,10 @@ private fun BacklogTaskItem(
         Box(modifier = Modifier.weight(1f)) {
             TaskCard(
                 taskWithTime = taskWithTime,
+                onToggleSubTaskDone = onToggleSubTaskDone,
+                onDeleteSubTask = onDeleteSubTask,
+                subTasksExpanded = subTasksExpanded,
+                onToggleSubTasksExpanded = onToggleSubTasksExpanded,
                 onClick = onClick,
             )
         }

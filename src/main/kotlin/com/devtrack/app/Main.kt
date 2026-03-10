@@ -18,6 +18,7 @@ import com.devtrack.infrastructure.notification.NotificationService
 import com.devtrack.infrastructure.systray.SystemTrayService
 import com.devtrack.ui.DevTrackApp
 import com.devtrack.viewmodel.TodayViewModel
+import com.devtrack.viewmodel.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -72,6 +73,7 @@ fun main() = application {
     // System tray integration (P4.3)
     val systemTrayService = koin.get<SystemTrayService>()
     val todayViewModel = koin.get<TodayViewModel>()
+    val settingsViewModel = koin.get<SettingsViewModel>()
 
     // Track whether the app should truly exit (Quit from tray) vs just hide (X button)
     var shouldReallyQuit = false
@@ -179,12 +181,13 @@ fun main() = application {
 
     Window(
         onCloseRequest = {
-            if (shouldReallyQuit || !systemTrayService.isSupported) {
+            val closeToTray = settingsViewModel.uiState.value.closeToTray
+            if (!closeToTray || shouldReallyQuit || !systemTrayService.isSupported) {
                 // Real quit: perform full shutdown and exit
                 performShutdown()
                 exitApplication()
             } else {
-                // P4.3.3: Close window = minimize to tray (not quit)
+                // Close window = minimize to tray (user opted in via settings)
                 windowState.isMinimized = true
                 logger.info("Window minimized to tray")
             }

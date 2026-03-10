@@ -97,7 +97,7 @@ class TodayViewModel(
         private set
 
     init {
-        loadTasks()
+        loadTasks(showLoading = true)
         checkOrphanSessions()
         if (enableTimerTicker) {
             startTimerTicker()
@@ -107,11 +107,17 @@ class TodayViewModel(
 
     /**
      * Load tasks planned for today and compute their time data.
+     *
+     * @param showLoading when true, sets isLoading = true so the UI shows a spinner.
+     *   Only used for the initial load; background refreshes (e.g. after toggling a
+     *   subtask) pass false to avoid replacing the task list with a loading indicator.
      */
-    fun loadTasks() {
+    fun loadTasks(showLoading: Boolean = false) {
         scope.launch {
             try {
-                _uiState.update { it.copy(isLoading = true, error = null) }
+                if (showLoading) {
+                    _uiState.update { it.copy(isLoading = true, error = null) }
+                }
 
                 val today = LocalDate.now()
                 val tasks = taskRepository.findByDate(today)
@@ -133,6 +139,7 @@ class TodayViewModel(
                     TaskWithTime(
                         task = task,
                         totalDuration = totalDuration,
+                        subTasks = subTasks,
                         sessionCount = taskSessions.size,
                         subTaskCount = subTasks.size,
                         completedSubTaskCount = subTasks.count { it.status == TaskStatus.DONE },
@@ -428,12 +435,19 @@ class TodayViewModel(
      * Delete a sub-task.
      */
     fun deleteSubTask(subTaskId: UUID) {
+        deleteSubTask(subTaskId, _uiState.value.selectedTask?.id)
+    }
+
+    fun deleteSubTask(subTask: Task) {
+        deleteSubTask(subTask.id, subTask.parentId)
+    }
+
+    private fun deleteSubTask(subTaskId: UUID, parentIdHint: UUID?) {
         scope.launch {
             try {
+                val parentId = parentIdHint ?: taskRepository.findById(subTaskId)?.parentId ?: return@launch
                 taskService.deleteTask(subTaskId)
-                val parentId = _uiState.value.selectedTask?.id ?: return@launch
-                val subTasks = taskService.getSubTasks(parentId)
-                _uiState.update { it.copy(subTasks = subTasks) }
+                refreshSelectedTaskSubTasks(parentId)
                 loadTasks()
             } catch (e: Exception) {
                 logger.error("Failed to delete sub-task", e)
@@ -444,20 +458,53 @@ class TodayViewModel(
 
     /**
      * Toggle a sub-task's done status.
+     * Uses optimistic update for fluid UI: local state is updated immediately,
+     * then persisted to DB in the background.
      */
     fun toggleSubTaskDone(subTask: Task) {
+        val parentId = subTask.parentId ?: _uiState.value.selectedTask?.id ?: return
+        val newStatus = if (subTask.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE
+        val updatedSubTask = subTask.copy(status = newStatus)
+
+        // Optimistic update: immediately reflect in the task list
+        _uiState.update { state ->
+            state.copy(
+                tasks = state.tasks.map { twt ->
+                    if (twt.task.id == parentId) {
+                        val newSubTasks = twt.subTasks.map { if (it.id == subTask.id) updatedSubTask else it }
+                        val newCompleted = newSubTasks.count { it.status == TaskStatus.DONE }
+                        twt.copy(
+                            subTasks = newSubTasks,
+                            completedSubTaskCount = newCompleted,
+                        )
+                    } else twt
+                },
+                // Also update the dialog sub-task list if open
+                subTasks = if (state.selectedTask?.id == parentId) {
+                    state.subTasks.map { if (it.id == subTask.id) updatedSubTask else it }
+                } else state.subTasks,
+            )
+        }
+
+        // Persist in the background and reconcile
         scope.launch {
             try {
-                val newStatus = if (subTask.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE
                 taskService.changeStatus(subTask.id, newStatus)
-                val parentId = _uiState.value.selectedTask?.id ?: return@launch
-                val subTasks = taskService.getSubTasks(parentId)
-                _uiState.update { it.copy(subTasks = subTasks) }
                 loadTasks()
             } catch (e: Exception) {
                 logger.error("Failed to toggle sub-task status", e)
+                // Revert optimistic update on failure
+                loadTasks()
                 _uiState.update { it.copy(error = e.message) }
             }
+        }
+    }
+
+    private suspend fun refreshSelectedTaskSubTasks(parentId: UUID) {
+        val selectedTaskId = _uiState.value.selectedTask?.id
+        if (selectedTaskId == parentId) {
+            val subTasks = taskService.getSubTasks(parentId)
+            _uiState.update { it.copy(subTasks = subTasks) }
         }
     }
 

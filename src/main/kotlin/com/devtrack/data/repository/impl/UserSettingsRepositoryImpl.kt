@@ -28,6 +28,7 @@ class UserSettingsRepositoryImpl(
         pomodoroBreakMin = this[UserSettingsTable.pomodoroBreakMin],
         pomodoroLongBreakMin = this[UserSettingsTable.pomodoroLongBreakMin],
         pomodoroSessionsBeforeLong = this[UserSettingsTable.pomodoroSessionsBeforeLong],
+        closeToTray = this[UserSettingsTable.closeToTray],
     )
 
     private suspend fun <T> dbQuery(block: suspend () -> T): T =
@@ -51,6 +52,7 @@ class UserSettingsRepositoryImpl(
                 it[pomodoroBreakMin] = defaults.pomodoroBreakMin
                 it[pomodoroLongBreakMin] = defaults.pomodoroLongBreakMin
                 it[pomodoroSessionsBeforeLong] = defaults.pomodoroSessionsBeforeLong
+                it[closeToTray] = defaults.closeToTray
             }
             defaults
         }
@@ -72,6 +74,7 @@ class UserSettingsRepositoryImpl(
                 it[pomodoroBreakMin] = settings.pomodoroBreakMin
                 it[pomodoroLongBreakMin] = settings.pomodoroLongBreakMin
                 it[pomodoroSessionsBeforeLong] = settings.pomodoroSessionsBeforeLong
+                it[closeToTray] = settings.closeToTray
             }
         } else {
             UserSettingsTable.insert {
@@ -85,6 +88,7 @@ class UserSettingsRepositoryImpl(
                 it[pomodoroBreakMin] = settings.pomodoroBreakMin
                 it[pomodoroLongBreakMin] = settings.pomodoroLongBreakMin
                 it[pomodoroSessionsBeforeLong] = settings.pomodoroSessionsBeforeLong
+                it[closeToTray] = settings.closeToTray
             }
         }
     }

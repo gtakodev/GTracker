@@ -36,6 +36,8 @@ data class SettingsUiState(
     val databasePath: String = "",
     val showImportConfirmation: Boolean = false,
     val pendingImportPath: Path? = null,
+    // Behavior
+    val closeToTray: Boolean = false,
     // About
     val appVersion: String = "1.0.0",
 )
@@ -90,6 +92,7 @@ class SettingsViewModel(
                         pomodoroSessionsBeforeLong = settings.pomodoroSessionsBeforeLong,
                         hoursPerDay = settings.hoursPerDay.toString(),
                         halfDayThreshold = settings.halfDayThreshold.toString(),
+                        closeToTray = settings.closeToTray,
                     )
                 }
 
@@ -173,6 +176,12 @@ class SettingsViewModel(
     }
 
     // -- Data / Backup (P4.7.2) --
+
+    /** Change close-to-tray behavior. */
+    fun setCloseToTray(enabled: Boolean) {
+        _uiState.update { it.copy(closeToTray = enabled) }
+        saveField { it.copy(closeToTray = enabled) }
+    }
 
     fun setDatabasePath(path: String) {
         _uiState.update { it.copy(databasePath = path) }

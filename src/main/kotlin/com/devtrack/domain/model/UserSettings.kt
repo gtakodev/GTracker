@@ -17,4 +17,5 @@ data class UserSettings(
     val pomodoroBreakMin: Int = 5,
     val pomodoroLongBreakMin: Int = 15,
     val pomodoroSessionsBeforeLong: Int = 4,
+    val closeToTray: Boolean = false,
 )

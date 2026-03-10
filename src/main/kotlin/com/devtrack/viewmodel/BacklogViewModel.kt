@@ -66,16 +66,22 @@ class BacklogViewModel(
     val uiState: StateFlow<BacklogUiState> = _uiState.asStateFlow()
 
     init {
-        loadTasks()
+        loadTasks(showLoading = true)
     }
 
     /**
      * Load all backlog tasks (unplanned, non-archived).
+     *
+     * @param showLoading when true, sets isLoading = true so the UI shows a spinner.
+     *   Only used for the initial load; background refreshes pass false to avoid
+     *   replacing the task list with a loading indicator.
      */
-    fun loadTasks() {
+    fun loadTasks(showLoading: Boolean = false) {
         scope.launch {
             try {
-                _uiState.update { it.copy(isLoading = true, error = null) }
+                if (showLoading) {
+                    _uiState.update { it.copy(isLoading = true, error = null) }
+                }
 
                 val tasks = taskRepository.findBacklog()
 
@@ -91,6 +97,7 @@ class BacklogViewModel(
                     TaskWithTime(
                         task = task,
                         totalDuration = totalDuration,
+                        subTasks = subTasks,
                         sessionCount = sessions.size,
                         subTaskCount = subTasks.size,
                         completedSubTaskCount = subTasks.count { it.status == TaskStatus.DONE },
@@ -440,12 +447,19 @@ class BacklogViewModel(
     }
 
     fun deleteSubTask(subTaskId: UUID) {
+        deleteSubTask(subTaskId, _uiState.value.selectedTask?.id)
+    }
+
+    fun deleteSubTask(subTask: Task) {
+        deleteSubTask(subTask.id, subTask.parentId)
+    }
+
+    private fun deleteSubTask(subTaskId: UUID, parentIdHint: UUID?) {
         scope.launch {
             try {
+                val parentId = parentIdHint ?: taskRepository.findById(subTaskId)?.parentId ?: return@launch
                 taskService.deleteTask(subTaskId)
-                val parentId = _uiState.value.selectedTask?.id ?: return@launch
-                val subTasks = taskService.getSubTasks(parentId)
-                _uiState.update { it.copy(subTasks = subTasks) }
+                refreshSelectedTaskSubTasks(parentId)
                 loadTasks()
             } catch (e: Exception) {
                 logger.error("Failed to delete sub-task", e)
@@ -455,18 +469,57 @@ class BacklogViewModel(
     }
 
     fun toggleSubTaskDone(subTask: Task) {
+        val parentId = subTask.parentId ?: _uiState.value.selectedTask?.id ?: return
+        val newStatus = if (subTask.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE
+        val updatedSubTask = subTask.copy(status = newStatus)
+
+        // Optimistic update: immediately reflect in the task list
+        _uiState.update { state ->
+            state.copy(
+                tasks = state.tasks.map { twt ->
+                    if (twt.task.id == parentId) {
+                        val newSubTasks = twt.subTasks.map { if (it.id == subTask.id) updatedSubTask else it }
+                        val newCompleted = newSubTasks.count { it.status == TaskStatus.DONE }
+                        twt.copy(
+                            subTasks = newSubTasks,
+                            completedSubTaskCount = newCompleted,
+                        )
+                    } else twt
+                },
+                filteredTasks = state.filteredTasks.map { twt ->
+                    if (twt.task.id == parentId) {
+                        val newSubTasks = twt.subTasks.map { if (it.id == subTask.id) updatedSubTask else it }
+                        val newCompleted = newSubTasks.count { it.status == TaskStatus.DONE }
+                        twt.copy(
+                            subTasks = newSubTasks,
+                            completedSubTaskCount = newCompleted,
+                        )
+                    } else twt
+                },
+                subTasks = if (state.selectedTask?.id == parentId) {
+                    state.subTasks.map { if (it.id == subTask.id) updatedSubTask else it }
+                } else state.subTasks,
+            )
+        }
+
+        // Persist in the background and reconcile
         scope.launch {
             try {
-                val newStatus = if (subTask.status == TaskStatus.DONE) TaskStatus.TODO else TaskStatus.DONE
                 taskService.changeStatus(subTask.id, newStatus)
-                val parentId = _uiState.value.selectedTask?.id ?: return@launch
-                val subTasks = taskService.getSubTasks(parentId)
-                _uiState.update { it.copy(subTasks = subTasks) }
                 loadTasks()
             } catch (e: Exception) {
                 logger.error("Failed to toggle sub-task status", e)
+                loadTasks()
                 _uiState.update { it.copy(error = e.message) }
             }
+        }
+    }
+
+    private suspend fun refreshSelectedTaskSubTasks(parentId: UUID) {
+        val selectedTaskId = _uiState.value.selectedTask?.id
+        if (selectedTaskId == parentId) {
+            val subTasks = taskService.getSubTasks(parentId)
+            _uiState.update { it.copy(subTasks = subTasks) }
         }
     }
 

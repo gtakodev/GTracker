@@ -11,6 +11,7 @@ import java.time.LocalDate
 data class TaskWithTime(
     val task: Task,
     val totalDuration: Duration = Duration.ZERO,
+    val subTasks: List<Task> = emptyList(),
     val subTaskCount: Int = 0,
     val completedSubTaskCount: Int = 0,
     val sessionCount: Int = 0,
