@@ -11,6 +11,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.sql.Connection
 import java.sql.DriverManager
+import java.util.UUID
 
 /**
  * Factory for creating and managing the SQLite database connection with
@@ -176,11 +177,15 @@ class DatabaseFactory(
      * A keep-alive [Connection] is held open to prevent SQLite from destroying
      * the shared in-memory database between Exposed transaction blocks.
      * No cipher config is applied — tests must not depend on a keyring daemon.
+     *
+     * [dbName] scopes the shared-memory namespace. Each call that uses the
+     * default generates a fresh UUID, so separate [DatabaseFactory] instances
+     * (e.g. different test classes) never share state accidentally.
      */
-    fun initInMemory(): Database {
-        logger.info("Initializing in-memory database (unencrypted, for tests)")
+    fun initInMemory(dbName: String = "devtrack-test-${UUID.randomUUID()}"): Database {
+        logger.info("Initializing in-memory database (unencrypted, for tests, name={})", dbName)
 
-        val url = "jdbc:sqlite:file:devtrack-test?mode=memory&cache=shared"
+        val url = "jdbc:sqlite:file:$dbName?mode=memory&cache=shared"
         keepAliveConnection = DriverManager.getConnection(url)
 
         val db = Database.connect(
