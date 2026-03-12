@@ -326,15 +326,43 @@ object KeyStoreFactory {
 
     /**
      * Retrieve the database encryption key from [keyStore], generating and
-     * persisting a new one if none exists (first launch).
+     * persisting a new one only when the alias is truly absent (first launch).
+     *
+     * Distinguishes three cases:
+     * 1. Key exists **and** is readable → return it.
+     * 2. Key is absent → generate, persist, and return a fresh key.
+     * 3. Key exists but [KeyStore.retrieveKey] returned `null` → the credential
+     *    store entry is present but could not be decrypted (corruption, key
+     *    rotation, wrong user account, etc.).  Generating a new key here would
+     *    silently discard the old one and make the existing database permanently
+     *    unreadable, so we throw instead and let the caller decide.
+     *
+     * The check-then-create sequence is guarded by a `synchronized` block on
+     * this object to prevent two threads in the same process from racing to
+     * generate duplicate keys.
      */
     fun getOrCreateDbKey(keyStore: KeyStore): ByteArray {
         val alias = "devtrack-db-key"
-        return keyStore.retrieveKey(alias) ?: run {
+        synchronized(this) {
+            val existing = keyStore.retrieveKey(alias)
+            if (existing != null) return existing
+
+            if (keyStore.hasKey(alias)) {
+                // Entry is present in the credential store but could not be read —
+                // decryption failure, corruption, or a permission problem.
+                throw IllegalStateException(
+                    "Database encryption key '$alias' exists in the credential store " +
+                        "but could not be retrieved. " +
+                        "Resolve the keystore issue and restart, or manually delete the entry " +
+                        "to allow a new key to be generated (this will make existing data unreadable).",
+                )
+            }
+
+            // Alias is genuinely absent — safe to create.
             val newKey = generateKey()
             keyStore.storeKey(alias, newKey)
             logger.info("Generated new database encryption key")
-            newKey
+            return newKey
         }
     }
 }
