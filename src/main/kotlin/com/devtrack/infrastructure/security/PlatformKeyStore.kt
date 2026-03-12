@@ -244,12 +244,17 @@ class WindowsKeyStore : KeyStore {
  * unavailable. Keys are stored as base64-encoded files with owner-only
  * permissions under `~/.devtrack/keys/`.
  *
+ * [keyDir] can be overridden in tests to point at a temporary directory so
+ * that no real credential files are written to `~/.devtrack/keys/`.
+ *
  * **Security warning:** This store does NOT provide OS-level encryption.
  * Its use is logged as a warning at startup.
  */
-class FallbackFileKeyStore : KeyStore {
+class FallbackFileKeyStore(
+    keyDir: File = File(System.getProperty("user.home"), ".devtrack/keys"),
+) : KeyStore {
     private val logger = LoggerFactory.getLogger(FallbackFileKeyStore::class.java)
-    private val keyDir = File(System.getProperty("user.home"), ".devtrack/keys")
+    private val keyDir: File = keyDir
 
     init {
         if (!keyDir.exists()) {

@@ -19,14 +19,9 @@ class FallbackFileKeyStoreTest {
     private val tempDir = createTempDirectory("devtrack-keystore-test").toFile()
     private lateinit var store: FallbackFileKeyStore
 
-    // Reflectively point the store at our temp dir for isolation
     @BeforeAll
     fun setup() {
-        store = FallbackFileKeyStore()
-        // Override the private keyDir field via reflection
-        val field = FallbackFileKeyStore::class.java.getDeclaredField("keyDir")
-        field.isAccessible = true
-        field.set(store, tempDir)
+        store = FallbackFileKeyStore(keyDir = tempDir)
     }
 
     @AfterAll
@@ -107,14 +102,8 @@ class KeyStoreFactoryTest {
 
     @Test
     fun `getOrCreateDbKey generates key on first call`() {
-        val store = FallbackFileKeyStore().also { s ->
-            // Redirect to temp dir
-            val field = FallbackFileKeyStore::class.java.getDeclaredField("keyDir")
-            field.isAccessible = true
-            val dir = createTempDirectory("kf-test").toFile()
-            field.set(s, dir)
-            dir.deleteOnExit()
-        }
+        val dir = createTempDirectory("kf-test").toFile().also { it.deleteOnExit() }
+        val store = FallbackFileKeyStore(keyDir = dir)
 
         assertFalse(store.hasKey("devtrack-db-key"))
         val key = KeyStoreFactory.getOrCreateDbKey(store)
@@ -124,13 +113,8 @@ class KeyStoreFactoryTest {
 
     @Test
     fun `getOrCreateDbKey returns existing key on subsequent calls`() {
-        val store = FallbackFileKeyStore().also { s ->
-            val field = FallbackFileKeyStore::class.java.getDeclaredField("keyDir")
-            field.isAccessible = true
-            val dir = createTempDirectory("kf-test2").toFile()
-            field.set(s, dir)
-            dir.deleteOnExit()
-        }
+        val dir = createTempDirectory("kf-test2").toFile().also { it.deleteOnExit() }
+        val store = FallbackFileKeyStore(keyDir = dir)
 
         val key1 = KeyStoreFactory.getOrCreateDbKey(store)
         val key2 = KeyStoreFactory.getOrCreateDbKey(store)
