@@ -193,6 +193,10 @@ class WindowsKeyStore : KeyStore {
     override fun storeKey(alias: String, key: ByteArray) {
         val encrypted = try {
             Crypt32Util.cryptProtectData(key, "DevTrack-$alias")
+        } catch (e: LinkageError) {
+            logger.error("CryptProtectData failed for alias '{}'. Using fallback. Error: {}", alias, e.message)
+            fallback.storeKey(alias, key)
+            return
         } catch (e: Exception) {
             logger.error("CryptProtectData failed for alias '{}'. Using fallback. Error: {}", alias, e.message)
             fallback.storeKey(alias, key)
@@ -219,9 +223,12 @@ class WindowsKeyStore : KeyStore {
 
         return try {
             Crypt32Util.cryptUnprotectData(encrypted)
+        } catch (e: LinkageError) {
+            logger.error("CryptUnprotectData failed for alias '{}': {}", alias, e.message)
+            fallback.retrieveKey(alias)
         } catch (e: Exception) {
             logger.error("CryptUnprotectData failed for alias '{}': {}", alias, e.message)
-            null
+            fallback.retrieveKey(alias)
         }
     }
 
