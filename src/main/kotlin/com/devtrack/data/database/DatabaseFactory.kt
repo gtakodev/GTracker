@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory
 import org.sqlite.SQLiteDataSource
 import org.sqlite.mc.SQLiteMCSqlCipherConfig
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.sql.Connection
 import java.sql.DriverManager
 
@@ -65,16 +67,86 @@ class DatabaseFactory(
 
         // If the file exists but is plain SQLite (pre-encryption migration),
         // back it up and let a fresh encrypted database be created.
+        // We also move any WAL/SHM sidecar files so that uncheckpointed data
+        // is not lost and no orphaned sidecars remain next to the new DB.
         if (dbFile.exists() && isPlainSQLite(dbFile)) {
-            val backup = File("$dbPath.bak")
+            val backupMain = File("$dbPath.bak")
+            val walFile    = File("$dbPath-wal")
+            val shmFile    = File("$dbPath-shm")
+            val backupWal  = File("$dbPath-wal.bak")
+            val backupShm  = File("$dbPath-shm.bak")
+
+            // Abort if any backup already exists to avoid silently overwriting
+            // a previous backup that may still be needed.
+            for (existing in listOf(backupMain, backupWal, backupShm)) {
+                if (existing.exists()) {
+                    logger.error(
+                        "Cannot back up unencrypted database: backup file {} already exists. " +
+                            "Remove or rename the existing backup and restart.",
+                        existing.absolutePath,
+                    )
+                    throw IllegalStateException(
+                        "Backup file already exists: ${existing.absolutePath}",
+                    )
+                }
+            }
+
             logger.warn(
                 "Existing database at {} is unencrypted. " +
-                    "Renaming to {} and creating a new encrypted database. " +
-                    "Your previous data will not be migrated automatically.",
+                    "Moving it (and any WAL/SHM sidecars) to *.bak and creating a new " +
+                    "encrypted database. Your previous data will not be migrated automatically.",
                 dbPath,
-                backup.name,
             )
-            dbFile.renameTo(backup)
+
+            // Move the main file first; if it fails we have not touched anything.
+            try {
+                Files.move(
+                    dbFile.toPath(),
+                    backupMain.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                )
+            } catch (_: UnsupportedOperationException) {
+                // ATOMIC_MOVE is not supported on this filesystem; fall back to
+                // a plain move (still raises an exception on failure).
+                Files.move(dbFile.toPath(), backupMain.toPath())
+            } catch (e: Exception) {
+                logger.error(
+                    "Failed to move unencrypted database {} to {}: {}",
+                    dbPath,
+                    backupMain.absolutePath,
+                    e.message,
+                )
+                throw IllegalStateException(
+                    "Could not back up unencrypted database: ${e.message}",
+                    e,
+                )
+            }
+
+            // Move sidecar files only if they exist; a missing sidecar is not
+            // an error (the DB may already be checkpointed / closed cleanly).
+            for ((sidecar, backupSidecar) in listOf(walFile to backupWal, shmFile to backupShm)) {
+                if (!sidecar.exists()) continue
+                try {
+                    Files.move(
+                        sidecar.toPath(),
+                        backupSidecar.toPath(),
+                        StandardCopyOption.ATOMIC_MOVE,
+                    )
+                } catch (_: UnsupportedOperationException) {
+                    Files.move(sidecar.toPath(), backupSidecar.toPath())
+                } catch (e: Exception) {
+                    logger.error(
+                        "Failed to move sidecar {} to {}: {}",
+                        sidecar.absolutePath,
+                        backupSidecar.absolutePath,
+                        e.message,
+                    )
+                    throw IllegalStateException(
+                        "Could not back up sidecar file ${sidecar.name}: ${e.message}",
+                        e,
+                    )
+                }
+            }
         }
 
         // Wrap the cipher config in a DataSource so that every connection
