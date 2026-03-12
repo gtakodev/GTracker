@@ -3,6 +3,9 @@ package com.devtrack.infrastructure.security
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFileAttributeView
+import java.nio.file.attribute.PosixFilePermission
 import kotlin.io.path.createTempDirectory
 
 /**
@@ -76,8 +79,19 @@ class FallbackFileKeyStoreTest {
         store.storeKey("perm-alias", key)
         val keyFile = File(tempDir, "perm-alias.key")
         assertTrue(keyFile.exists())
-        // canRead by owner == true; no group/others read (JVM API can only check owner)
-        assertTrue(keyFile.canRead())
+
+        val path = keyFile.toPath()
+        val posixView = Files.getFileAttributeView(path, PosixFileAttributeView::class.java)
+        if (posixView != null) {
+            val perms = Files.getPosixFilePermissions(path)
+            assertEquals(
+                setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE),
+                perms,
+                "Key file should have owner-read/write permissions only (no group or others)",
+            )
+        }
+        // On non-POSIX filesystems (e.g. Windows NTFS) the check is not applicable;
+        // file existence verified above is sufficient in that environment.
     }
 }
 
