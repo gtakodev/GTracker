@@ -1,11 +1,6 @@
 package com.devtrack.infrastructure.security
 
-import com.sun.jna.Library
-import com.sun.jna.Memory
-import com.sun.jna.Native
-import com.sun.jna.Pointer
-import com.sun.jna.Structure
-import com.sun.jna.ptr.PointerByReference
+import com.sun.jna.platform.win32.Crypt32Util
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.security.SecureRandom
@@ -166,49 +161,18 @@ class LinuxKeyStore : KeyStore {
 }
 
 // ---------------------------------------------------------------------------
-// Windows — DPAPI via JNA (Crypt32.dll)
+// Windows — DPAPI via JNA-platform (Crypt32Util)
 // ---------------------------------------------------------------------------
 
 /**
- * JNA binding to the Windows DPAPI functions in `Crypt32.dll`.
- */
-private interface Crypt32 : Library {
-    @Structure.FieldOrder("cbData", "pbData")
-    class DataBlob(pointer: Pointer? = null) : Structure(pointer) {
-        @JvmField var cbData: Int = 0
-        @JvmField var pbData: Pointer? = null
-
-        init {
-            if (pointer != null) read()
-        }
-    }
-
-    fun CryptProtectData(
-        pDataIn: DataBlob,
-        szDataDescr: String?,
-        pOptionalEntropy: DataBlob?,
-        pvReserved: Pointer?,
-        pPromptStruct: Pointer?,
-        dwFlags: Int,
-        pDataOut: DataBlob,
-    ): Boolean
-
-    fun CryptUnprotectData(
-        pDataIn: DataBlob,
-        ppszDataDescr: PointerByReference?,
-        pOptionalEntropy: DataBlob?,
-        pvReserved: Pointer?,
-        pPromptStruct: Pointer?,
-        dwFlags: Int,
-        pDataOut: DataBlob,
-    ): Boolean
-}
-
-/**
- * Windows key storage using DPAPI (Data Protection API) via JNA.
+ * Windows key storage using DPAPI (Data Protection API) via
+ * [Crypt32Util] from `jna-platform`.
  *
- * The encryption key bytes are protected with `CryptProtectData` (scoped to
- * the current user) and stored as a base64-encoded file. Even if the file is
+ * [Crypt32Util.cryptProtectData] / [Crypt32Util.cryptUnprotectData] accept and
+ * return plain `ByteArray` and handle `LocalFree` for the native output buffer
+ * internally, so there is no native-memory leak.
+ *
+ * The protected bytes are stored as a base64-encoded file. Even if the file is
  * read by a different OS user account, it cannot be decrypted.
  *
  * Falls back to [FallbackFileKeyStore] with a warning if DPAPI is unavailable
@@ -222,34 +186,19 @@ class WindowsKeyStore : KeyStore {
     )
     private val fallback by lazy { FallbackFileKeyStore() }
 
-    private val crypt32: Crypt32? by lazy {
-        try {
-            Native.load("Crypt32", Crypt32::class.java) as Crypt32
-        } catch (_: Exception) {
-            logger.warn("DPAPI (Crypt32.dll) not available. Falling back to file-based key store.")
-            null
-        }
-    }
-
     init {
         if (!keyDir.exists()) keyDir.mkdirs()
     }
 
     override fun storeKey(alias: String, key: ByteArray) {
-        val lib = crypt32 ?: run { fallback.storeKey(alias, key); return }
-
-        val mem = Memory(key.size.toLong()).apply { write(0, key, 0, key.size) }
-        val dataIn = Crypt32.DataBlob().apply { cbData = key.size; pbData = mem }
-        val dataOut = Crypt32.DataBlob()
-
-        if (!lib.CryptProtectData(dataIn, "DevTrack-$alias", null, null, null, 0, dataOut)) {
-            logger.error("CryptProtectData failed for alias '{}'. Using fallback.", alias)
+        val encrypted = try {
+            Crypt32Util.cryptProtectData(key, "DevTrack-$alias")
+        } catch (e: Exception) {
+            logger.error("CryptProtectData failed for alias '{}'. Using fallback. Error: {}", alias, e.message)
             fallback.storeKey(alias, key)
             return
         }
 
-        val encrypted = ByteArray(dataOut.cbData)
-        dataOut.pbData!!.read(0, encrypted, 0, dataOut.cbData)
         val keyFile = File(keyDir, "$alias.dpapi")
         keyFile.writeText(Base64.getEncoder().encodeToString(encrypted))
         keyFile.setReadable(false, false); keyFile.setReadable(true, true)
@@ -258,23 +207,22 @@ class WindowsKeyStore : KeyStore {
     }
 
     override fun retrieveKey(alias: String): ByteArray? {
-        val lib = crypt32 ?: return fallback.retrieveKey(alias)
         val keyFile = File(keyDir, "$alias.dpapi")
         if (!keyFile.exists()) return fallback.retrieveKey(alias)
 
-        val encrypted = Base64.getDecoder().decode(keyFile.readText().trim())
-        val mem = Memory(encrypted.size.toLong()).apply { write(0, encrypted, 0, encrypted.size) }
-        val dataIn = Crypt32.DataBlob().apply { cbData = encrypted.size; pbData = mem }
-        val dataOut = Crypt32.DataBlob()
-
-        if (!lib.CryptUnprotectData(dataIn, null, null, null, null, 0, dataOut)) {
-            logger.error("CryptUnprotectData failed for alias '{}'", alias)
+        val encrypted = try {
+            Base64.getDecoder().decode(keyFile.readText().trim())
+        } catch (e: Exception) {
+            logger.error("Corrupt DPAPI key file for alias '{}': {}", alias, e.message)
             return null
         }
 
-        val key = ByteArray(dataOut.cbData)
-        dataOut.pbData!!.read(0, key, 0, dataOut.cbData)
-        return key
+        return try {
+            Crypt32Util.cryptUnprotectData(encrypted)
+        } catch (e: Exception) {
+            logger.error("CryptUnprotectData failed for alias '{}': {}", alias, e.message)
+            null
+        }
     }
 
     override fun deleteKey(alias: String) {
