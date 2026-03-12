@@ -2,6 +2,8 @@ package com.devtrack.app
 
 import com.devtrack.data.database.DatabaseFactory
 import com.devtrack.data.database.MigrationManager
+import com.devtrack.infrastructure.security.KeyStore
+import com.devtrack.infrastructure.security.KeyStoreFactory
 import com.devtrack.data.repository.*
 import com.devtrack.data.repository.impl.*
 import com.devtrack.domain.service.*
@@ -34,7 +36,8 @@ fun appModules() = listOf(
 )
 
 val databaseModule = module {
-    single { DatabaseFactory() }
+    single<KeyStore> { KeyStoreFactory.create() }
+    single { DatabaseFactory(get()) }
     single { MigrationManager(get()) }
 }
 
