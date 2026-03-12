@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.concurrent.TimeUnit
 
 // ---------------------------------------------------------------------------
 // Linux — libsecret via `secret-tool` CLI
@@ -33,13 +34,43 @@ class LinuxKeyStore : KeyStore {
     /** True when `secret-tool` can be found on PATH and the service responds. */
     private val secretToolAvailable: Boolean by lazy {
         try {
-            val result = ProcessBuilder("secret-tool", "--version")
+            val process = ProcessBuilder("secret-tool", "--version")
                 .redirectErrorStream(true)
                 .start()
-                .apply { waitFor() }
-            result.exitValue() == 0
+            if (!process.waitFor(SECRET_TOOL_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly()
+                logger.warn("secret-tool --version timed out; treating as unavailable")
+                return@lazy false
+            }
+            process.exitValue() == 0
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
         } catch (_: Exception) {
             false
+        }
+    }
+
+    /**
+     * Waits for [process] to exit within [SECRET_TOOL_TIMEOUT_MS] milliseconds.
+     * Returns the exit code on success, or `null` when the timeout elapses or
+     * the current thread is interrupted (in which case the interrupted flag is
+     * restored and the process is force-killed).
+     */
+    private fun awaitProcess(process: Process, context: String): Int? {
+        return try {
+            if (!process.waitFor(SECRET_TOOL_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly()
+                logger.error("secret-tool {} timed out after {}ms", context, SECRET_TOOL_TIMEOUT_MS)
+                null
+            } else {
+                process.exitValue()
+            }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            process.destroyForcibly()
+            logger.error("Interrupted while waiting for secret-tool {}", context)
+            null
         }
     }
 
@@ -64,7 +95,11 @@ class LinuxKeyStore : KeyStore {
             .start()
 
         process.outputStream.bufferedWriter().use { it.write(encoded) }
-        val exitCode = process.waitFor()
+        val exitCode = awaitProcess(process, "store") ?: run {
+            logger.warn("Falling back to file-based key store for alias '{}' (timeout/interrupt)", alias)
+            fallback.storeKey(alias, key)
+            return
+        }
         if (exitCode != 0) {
             val err = process.inputStream.bufferedReader().readText()
             logger.error("secret-tool store failed (exit {}): {}", exitCode, err)
@@ -87,7 +122,7 @@ class LinuxKeyStore : KeyStore {
             .start()
 
         val output = process.inputStream.bufferedReader().readText().trim()
-        val exitCode = process.waitFor()
+        val exitCode = awaitProcess(process, "lookup") ?: return fallback.retrieveKey(alias)
 
         return if (exitCode == 0 && output.isNotEmpty()) {
             try {
@@ -114,14 +149,19 @@ class LinuxKeyStore : KeyStore {
         )
             .redirectErrorStream(true)
             .start()
-        process.waitFor()
-        fallback.deleteKey(alias) // also clean up any legacy file
+        awaitProcess(process, "clear") // exit code is ignored; always clean up fallback too
+        fallback.deleteKey(alias)
         logger.info("Key deleted: {}", alias)
     }
 
     override fun hasKey(alias: String): Boolean {
         if (!secretToolAvailable) return fallback.hasKey(alias)
         return retrieveKey(alias) != null
+    }
+
+    companion object {
+        /** Maximum time in milliseconds to wait for any single `secret-tool` invocation. */
+        private const val SECRET_TOOL_TIMEOUT_MS = 5_000L
     }
 }
 
