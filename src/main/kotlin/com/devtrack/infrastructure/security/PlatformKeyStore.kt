@@ -116,8 +116,8 @@ class LinuxKeyStore : KeyStore {
             .redirectErrorStream(false)
             .start()
 
-        val output = process.inputStream.bufferedReader().readText().trim()
         val exitCode = awaitProcess(process, "lookup") ?: return fallback.retrieveKey(alias)
+        val output = process.inputStream.bufferedReader().readText().trim()
 
         return if (exitCode == 0 && output.isNotEmpty()) {
             try {
@@ -192,7 +192,7 @@ class WindowsKeyStore : KeyStore {
 
     override fun storeKey(alias: String, key: ByteArray) {
         val encrypted = try {
-            Crypt32Util.cryptProtectData(key, "DevTrack-$alias")
+            Crypt32Util.cryptProtectData(key)
         } catch (e: LinkageError) {
             logger.error("CryptProtectData failed for alias '{}'. Using fallback. Error: {}", alias, e.message)
             fallback.storeKey(alias, key)
