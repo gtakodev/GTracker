@@ -29,8 +29,13 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-java-time:$exposedVersion")
 
-    // SQLite JDBC driver
-    implementation("org.xerial:sqlite-jdbc:3.47.1.0")
+    // SQLite JDBC driver with SQLCipher/SQLite-Multiple-Ciphers encryption support
+    // Replaces org.xerial:sqlite-jdbc — same API, adds PRAGMA key support
+    implementation("io.github.willena:sqlite-jdbc:3.47.2.0")
+
+    // JNA — used by WindowsKeyStore (DPAPI via Crypt32.dll)
+    implementation("net.java.dev.jna:jna:5.17.0")
+    implementation("net.java.dev.jna:jna-platform:5.17.0")
 
     // Logging
     implementation("ch.qos.logback:logback-classic:1.5.15")
