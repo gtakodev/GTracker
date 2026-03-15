@@ -1,17 +1,55 @@
-package com.devtrack.ui.theme
+ package com.devtrack.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.platform.Font
 import androidx.compose.ui.unit.sp
 
-// JetBrains Mono for code/tickets - fallback to system monospace if not available
-val JetBrainsMonoFamily = FontFamily.Monospace
+// JetBrains Mono — bundled TTF files (OFL licensed)
+val JetBrainsMonoFamily = FontFamily(
+    Font(
+        resource = "fonts/JetBrainsMono-Regular.ttf",
+        weight = FontWeight.Normal,
+        style = FontStyle.Normal,
+    ),
+    Font(
+        resource = "fonts/JetBrainsMono-Medium.ttf",
+        weight = FontWeight.Medium,
+        style = FontStyle.Normal,
+    ),
+    Font(
+        resource = "fonts/JetBrainsMono-Bold.ttf",
+        weight = FontWeight.Bold,
+        style = FontStyle.Normal,
+    ),
+)
 
-// Inter / JetBrains Sans for titles - fallback to default sans-serif
-val InterFamily = FontFamily.SansSerif
+// Inter — bundled TTF files (OFL licensed)
+val InterFamily = FontFamily(
+    Font(
+        resource = "fonts/Inter-Regular.ttf",
+        weight = FontWeight.Normal,
+        style = FontStyle.Normal,
+    ),
+    Font(
+        resource = "fonts/Inter-Medium.ttf",
+        weight = FontWeight.Medium,
+        style = FontStyle.Normal,
+    ),
+    Font(
+        resource = "fonts/Inter-SemiBold.ttf",
+        weight = FontWeight.SemiBold,
+        style = FontStyle.Normal,
+    ),
+    Font(
+        resource = "fonts/Inter-Bold.ttf",
+        weight = FontWeight.Bold,
+        style = FontStyle.Normal,
+    ),
+)
 
 val DevTrackTypography = Typography(
     displayLarge = TextStyle(
