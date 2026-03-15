@@ -19,3 +19,5 @@
 Both fonts are licensed under the [SIL Open Font License, Version 1.1](https://scripts.sil.org/OFL),
 which allows free use, modification, and redistribution as long as the fonts are not sold by themselves.
 
+The full license text is available in [`OFL.txt`](OFL.txt) alongside this file.
+
