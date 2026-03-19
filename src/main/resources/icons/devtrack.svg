@@ -1,0 +1,27 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Background -->
+  <rect x="32" y="32" width="448" height="448" rx="100" fill="#1A1A1A"/>
+
+  <!-- Pomodoro shape -->
+  <circle cx="256" cy="280" r="140" fill="#F97316"/>
+
+  <!-- Top leaf (stylized) -->
+  <path d="M220 120 Q256 60 292 120 Q256 100 220 120" fill="#FACC15"/>
+
+  <!-- Focus arc (timer feeling) -->
+  <path d="M256 140 A140 140 0 0 1 396 280"
+        fill="none"
+        stroke="#FDBA74"
+        stroke-width="20"
+        stroke-linecap="round"/>
+
+  <!-- Checkmark -->
+  <path d="M190 280 L240 330 L340 220"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="26"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+</svg>

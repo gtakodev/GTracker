@@ -93,15 +93,8 @@ compose.desktop {
                 "jdk.unsupported",    // sun.misc.Unsafe (used by coroutines)
             )
 
-            // App icon — uncomment when icon files are available:
-            // windows {
-            //     iconFile.set(project.file("src/main/resources/icons/devtrack.ico"))
-            // }
-            // linux {
-            //     iconFile.set(project.file("src/main/resources/icons/devtrack.png"))
-            // }
-
             windows {
+                iconFile.set(project.file("src/main/resources/icons/devtrack.ico"))
                 menuGroup = "DevTrack"
                 dirChooser = true
                 shortcut = true
@@ -110,6 +103,7 @@ compose.desktop {
             }
 
             linux {
+                iconFile.set(project.file("src/main/resources/icons/devtrack.png"))
                 packageName = "devtrack"
                 debMaintainer = "devtrack@localhost"
                 appCategory = "Development"

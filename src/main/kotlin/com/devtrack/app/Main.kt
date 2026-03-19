@@ -2,6 +2,7 @@ package com.devtrack.app
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -194,6 +195,7 @@ fun main() = application {
         },
         title = "DevTrack",
         state = windowState,
+        icon = painterResource("icons/devtrack.png"),
     ) {
         window.minimumSize = java.awt.Dimension(900, 600)
         DevTrackApp()
