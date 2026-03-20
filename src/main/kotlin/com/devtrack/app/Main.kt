@@ -180,6 +180,8 @@ fun main() = application {
         logger.info("DevTrack shutting down...")
     }
 
+    val appIcon = painterResource("icons/devtrack.png")
+
     Window(
         onCloseRequest = {
             val closeToTray = settingsViewModel.uiState.value.closeToTray
@@ -195,7 +197,7 @@ fun main() = application {
         },
         title = "DevTrack",
         state = windowState,
-        icon = painterResource("icons/devtrack.png"),
+        icon = appIcon,
     ) {
         window.minimumSize = java.awt.Dimension(900, 600)
         DevTrackApp()
