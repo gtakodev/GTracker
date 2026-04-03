@@ -152,7 +152,7 @@ Exemple : `P0.1.3` = Phase 0, Groupe 1, Tache 3
   - Palette de couleurs Dark (PRD 5.2) : Primary `#60A5FA`, Surface `#1E1E2E`, etc.
   - Couleurs des categories (PRD 3.4) : `categoryColor(category: TaskCategory): Color`
   - Couleurs du timer : actif (vert), pause (jaune)
-- [~] `P0.6.2` Configurer la typographie — **Utilise fonts systeme au lieu de Inter/JetBrains Mono** ([#3](https://github.com/gtakodev/GTracker/issues/3))
+- [x] `P0.6.2` Configurer la typographie — Fonts Inter & JetBrains Mono bundled ([#3](https://github.com/gtakodev/GTracker/issues/3))
   - Integrer les fonts Inter/JetBrains Sans (titres) et JetBrains Mono (code/tickets)
   - Definir les styles Material 3 : displayLarge, headlineMedium, bodyLarge, labelSmall, etc.
 - [x] `P0.6.3` Implementer le switch de theme
