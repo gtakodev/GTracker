@@ -9,9 +9,9 @@ import com.devtrack.domain.model.TaskStatus
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -43,7 +43,7 @@ class TaskRepositoryImpl(
     )
 
     private suspend fun <T> dbQuery(block: suspend () -> T): T =
-        newSuspendedTransaction(db = databaseFactory.getDatabase()) { block() }
+        suspendTransaction(db = databaseFactory.getDatabase()) { block() }
 
     override suspend fun findById(id: UUID): Task? = dbQuery {
         TasksTable.selectAll()

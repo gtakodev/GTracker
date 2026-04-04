@@ -242,7 +242,7 @@ private fun EventRow(
                 readOnly = true,
                 label = { Text(I18n.t("session.edit_events.event_type"), style = MaterialTheme.typography.labelSmall) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded) },
-                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                 textStyle = MaterialTheme.typography.bodySmall,
             )
             ExposedDropdownMenu(

@@ -1,7 +1,7 @@
 package com.devtrack.data.database
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Exposed DSL table definitions for DevTrack.

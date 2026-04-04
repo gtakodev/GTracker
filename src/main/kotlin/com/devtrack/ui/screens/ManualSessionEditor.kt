@@ -90,7 +90,7 @@ fun ManualSessionEditor(
                         readOnly = false,
                         label = { Text(I18n.t("session.manual.task")) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = taskExpanded) },
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                         singleLine = true,
                     )
                     ExposedDropdownMenu(

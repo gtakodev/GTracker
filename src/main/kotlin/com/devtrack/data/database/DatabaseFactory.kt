@@ -2,7 +2,7 @@ package com.devtrack.data.database
 
 import com.devtrack.infrastructure.security.KeyStore
 import com.devtrack.infrastructure.security.KeyStoreFactory
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
 import org.slf4j.LoggerFactory
 import org.sqlite.SQLiteDataSource
 import org.sqlite.mc.SQLiteMCSqlCipherConfig

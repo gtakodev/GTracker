@@ -5,9 +5,9 @@ import com.devtrack.data.database.Tables.SessionEventsTable
 import com.devtrack.data.repository.SessionEventRepository
 import com.devtrack.domain.model.EventType
 import com.devtrack.domain.model.SessionEvent
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import java.time.Instant
 import java.util.UUID
 
@@ -27,7 +27,7 @@ class SessionEventRepositoryImpl(
     )
 
     private suspend fun <T> dbQuery(block: suspend () -> T): T =
-        newSuspendedTransaction(db = databaseFactory.getDatabase()) { block() }
+        suspendTransaction(db = databaseFactory.getDatabase()) { block() }
 
     override suspend fun findById(id: UUID): SessionEvent? = dbQuery {
         SessionEventsTable.selectAll()

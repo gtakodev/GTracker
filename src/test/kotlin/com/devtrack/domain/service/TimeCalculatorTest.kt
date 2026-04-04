@@ -4,7 +4,7 @@ import com.devtrack.domain.model.EventType
 import com.devtrack.domain.model.SessionEvent
 import com.devtrack.domain.model.UserSettings
 import com.devtrack.domain.model.WorkSession
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test

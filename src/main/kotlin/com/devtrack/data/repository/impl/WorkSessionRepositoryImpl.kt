@@ -5,9 +5,9 @@ import com.devtrack.data.database.Tables.WorkSessionsTable
 import com.devtrack.data.repository.WorkSessionRepository
 import com.devtrack.domain.model.SessionSource
 import com.devtrack.domain.model.WorkSession
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -30,7 +30,7 @@ class WorkSessionRepositoryImpl(
     )
 
     private suspend fun <T> dbQuery(block: suspend () -> T): T =
-        newSuspendedTransaction(db = databaseFactory.getDatabase()) { block() }
+        suspendTransaction(db = databaseFactory.getDatabase()) { block() }
 
     override suspend fun findById(id: UUID): WorkSession? = dbQuery {
         WorkSessionsTable.selectAll()

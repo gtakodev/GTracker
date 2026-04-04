@@ -1,10 +1,10 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
-    kotlin("jvm") version "2.1.10"
-    id("org.jetbrains.compose") version "1.7.3"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.1.10"
-    kotlin("plugin.serialization") version "2.1.10"
+    kotlin("jvm") version "2.1.20"
+    id("org.jetbrains.compose") version "1.10.3"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.1.20"
+    kotlin("plugin.serialization") version "2.1.20"
 }
 
 group = "com.devtrack"
@@ -19,27 +19,25 @@ repositories {
 dependencies {
     // Compose Desktop
     implementation(compose.desktop.currentOs)
-    implementation(compose.material3)
-    implementation(compose.materialIconsExtended)
+    implementation("org.jetbrains.compose.material3:material3:1.9.0")
+    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
 
-    // Database - Exposed ORM
-    val exposedVersion = "0.58.0"
+    // Database - Exposed DSL (no DAO layer used)
+    val exposedVersion = "1.2.0"
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-java-time:$exposedVersion")
 
     // SQLite JDBC driver with SQLCipher/SQLite-Multiple-Ciphers encryption support
     // Replaces org.xerial:sqlite-jdbc — same API, adds PRAGMA key support
-    implementation("io.github.willena:sqlite-jdbc:3.47.2.0")
+    implementation("io.github.willena:sqlite-jdbc:3.51.2.0")
 
     // JNA — used by WindowsKeyStore (DPAPI via Crypt32.dll)
     implementation("net.java.dev.jna:jna:5.17.0")
     implementation("net.java.dev.jna:jna-platform:5.17.0")
 
     // Logging
-    implementation("ch.qos.logback:logback-classic:1.5.15")
-    implementation("org.slf4j:slf4j-api:2.0.16")
+    implementation("ch.qos.logback:logback-classic:1.5.32")
+    implementation("org.slf4j:slf4j-api:2.0.17")
 
     // Dependency Injection - Koin
     val koinVersion = "4.0.2"
@@ -47,17 +45,19 @@ dependencies {
     implementation("io.insert-koin:koin-compose:$koinVersion")
 
     // Serialization (for JSON jira_tickets field)
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
 
     // Testing
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
-    testImplementation("io.mockk:mockk:1.13.14")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
-    testImplementation(compose.desktop.uiTestJUnit4)
+    testImplementation(platform("org.junit:junit-bom:5.14.3"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("io.mockk:mockk:1.14.9")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("org.jetbrains.compose.ui:ui-test-junit4:1.10.3")
 }
 
 java {

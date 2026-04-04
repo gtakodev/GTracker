@@ -2,7 +2,9 @@ package com.devtrack.app
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import org.jetbrains.skia.Image
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -32,6 +34,7 @@ import kotlinx.coroutines.runBlocking
 import org.koin.core.context.startKoin
 import org.koin.java.KoinJavaComponent.getKoin
 import org.slf4j.LoggerFactory
+import kotlin.time.Duration.Companion.milliseconds
 
 private val logger = LoggerFactory.getLogger("com.devtrack.app.Main")
 
@@ -135,7 +138,7 @@ fun main() = application {
         ) { size, position ->
             Triple(size, position, Unit)
         }
-            .debounce(500L)
+            .debounce(500L.milliseconds)
             .collectLatest { (size, position, _) ->
                 val x = (position as? WindowPosition.Absolute)?.x?.value?.toInt() ?: -1
                 val y = (position as? WindowPosition.Absolute)?.y?.value?.toInt() ?: -1
@@ -180,7 +183,13 @@ fun main() = application {
         logger.info("DevTrack shutting down...")
     }
 
-    val appIcon = painterResource("icons/devtrack.png")
+    val appIcon = BitmapPainter(
+        Image.makeFromEncoded(
+            Thread.currentThread().contextClassLoader
+                .getResourceAsStream("icons/devtrack.png")!!
+                .readAllBytes()
+        ).toComposeImageBitmap()
+    )
 
     Window(
         onCloseRequest = {

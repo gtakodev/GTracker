@@ -232,7 +232,7 @@ class BackupService(
      */
     private fun countRecords(): Pair<Long, Long> {
         return try {
-            org.jetbrains.exposed.sql.transactions.transaction {
+            org.jetbrains.exposed.v1.jdbc.transactions.transaction {
                 val taskCount = exec("SELECT COUNT(*) FROM tasks") { rs ->
                     if (rs.next()) rs.getLong(1) else 0L
                 } ?: 0L

@@ -4,9 +4,9 @@ import com.devtrack.data.database.DatabaseFactory
 import com.devtrack.data.database.Tables.UserSettingsTable
 import com.devtrack.data.repository.UserSettingsRepository
 import com.devtrack.domain.model.UserSettings
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import java.util.UUID
 
 /**
@@ -32,7 +32,7 @@ class UserSettingsRepositoryImpl(
     )
 
     private suspend fun <T> dbQuery(block: suspend () -> T): T =
-        newSuspendedTransaction(db = databaseFactory.getDatabase()) { block() }
+        suspendTransaction(db = databaseFactory.getDatabase()) { block() }
 
     override suspend fun get(): UserSettings = dbQuery {
         val row = UserSettingsTable.selectAll().singleOrNull()
