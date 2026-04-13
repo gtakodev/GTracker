@@ -9,7 +9,6 @@ import com.devtrack.domain.service.TimeCalculator
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.slf4j.LoggerFactory
-import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.coroutines.CoroutineContext
@@ -84,15 +83,17 @@ class BacklogViewModel(
                 }
 
                 val tasks = taskRepository.findBacklog()
+                val taskIds = tasks.map(Task::id)
+                val sessionsByTaskId = sessionRepository.findByTaskIds(taskIds)
+                val allSessions = sessionsByTaskId.values.flatten()
+                val eventsBySessionId = eventRepository.findBySessionIds(allSessions.map(WorkSession::id))
+                val subTasksByParentId = taskRepository.findByParentIds(taskIds)
 
                 // Build TaskWithTime for each task
                 val tasksWithTime = tasks.map { task ->
-                    val sessions = sessionRepository.findByTaskId(task.id)
-                    val eventsMap = sessions.associate { session ->
-                        session.id to eventRepository.findBySessionId(session.id)
-                    }
-                    val totalDuration = timeCalculator.calculateTotalForTask(sessions, eventsMap)
-                    val subTasks = taskRepository.findByParentId(task.id)
+                    val sessions = sessionsByTaskId[task.id].orEmpty()
+                    val totalDuration = timeCalculator.calculateTotalForTask(sessions, eventsBySessionId)
+                    val subTasks = subTasksByParentId[task.id].orEmpty()
 
                     TaskWithTime(
                         task = task,
@@ -175,8 +176,8 @@ class BacklogViewModel(
                 val query = state.searchQuery.lowercase()
                 filtered = filtered.filter { twt ->
                     twt.task.title.lowercase().contains(query) ||
-                        twt.task.jiraTickets.any { it.lowercase().contains(query) } ||
-                        twt.task.description?.lowercase()?.contains(query) == true
+                            twt.task.jiraTickets.any { it.lowercase().contains(query) } ||
+                            twt.task.description?.lowercase()?.contains(query) == true
                 }
             }
 
@@ -247,13 +248,16 @@ class BacklogViewModel(
                 val ids = _uiState.value.selectedTaskIds
                 ids.forEach { taskService.planTask(it, LocalDate.now()) }
                 _uiState.update {
+                    val updatedTasks = it.tasks.filterNot { taskWithTime -> taskWithTime.task.id in ids }
                     it.copy(
+                        tasks = updatedTasks,
+                        filteredTasks = updatedTasks,
                         selectedTaskIds = emptySet(),
                         isMultiSelectMode = false,
                         snackbarMessage = "backlog.batch_planned",
                     )
                 }
-                loadTasks()
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to batch plan tasks", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -270,13 +274,16 @@ class BacklogViewModel(
                 val ids = _uiState.value.selectedTaskIds
                 ids.forEach { taskService.planTask(it, date) }
                 _uiState.update {
+                    val updatedTasks = it.tasks.filterNot { taskWithTime -> taskWithTime.task.id in ids }
                     it.copy(
+                        tasks = updatedTasks,
+                        filteredTasks = updatedTasks,
                         selectedTaskIds = emptySet(),
                         isMultiSelectMode = false,
                         snackbarMessage = "backlog.batch_planned",
                     )
                 }
-                loadTasks()
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to batch plan tasks", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -293,13 +300,16 @@ class BacklogViewModel(
                 val ids = _uiState.value.selectedTaskIds
                 ids.forEach { taskService.changeStatus(it, TaskStatus.ARCHIVED) }
                 _uiState.update {
+                    val updatedTasks = it.tasks.filterNot { taskWithTime -> taskWithTime.task.id in ids }
                     it.copy(
+                        tasks = updatedTasks,
+                        filteredTasks = updatedTasks,
                         selectedTaskIds = emptySet(),
                         isMultiSelectMode = false,
                         snackbarMessage = "backlog.batch_archived",
                     )
                 }
-                loadTasks()
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to batch archive tasks", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -316,13 +326,16 @@ class BacklogViewModel(
                 val ids = _uiState.value.selectedTaskIds
                 ids.forEach { taskService.deleteTask(it) }
                 _uiState.update {
+                    val updatedTasks = it.tasks.filterNot { taskWithTime -> taskWithTime.task.id in ids }
                     it.copy(
+                        tasks = updatedTasks,
+                        filteredTasks = updatedTasks,
                         selectedTaskIds = emptySet(),
                         isMultiSelectMode = false,
                         snackbarMessage = "backlog.batch_deleted",
                     )
                 }
-                loadTasks()
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to batch delete tasks", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -339,7 +352,11 @@ class BacklogViewModel(
         scope.launch {
             try {
                 taskService.planTask(taskId, LocalDate.now())
-                loadTasks()
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.filterNot { it.task.id == taskId }
+                    state.copy(tasks = updatedTasks)
+                }
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to plan task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -371,9 +388,14 @@ class BacklogViewModel(
                 val title = _uiState.value.quickCreateText.trim()
                 if (title.isBlank()) return@launch
 
-                taskService.createTask(title, plannedDate = null)
-                _uiState.update { it.copy(quickCreateText = "") }
-                loadTasks()
+                val createdTask = taskService.createTask(title, plannedDate = null)
+                _uiState.update { state ->
+                    state.copy(
+                        tasks = listOf(TaskWithTime(task = createdTask, level = TaskLevel.BACKLOG)) + state.tasks,
+                        quickCreateText = "",
+                    )
+                }
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to create backlog task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -395,15 +417,39 @@ class BacklogViewModel(
     }
 
     fun closeTaskDetail() {
-        _uiState.update { it.copy(selectedTask = null, showTaskDetail = false, showDeleteConfirmation = false, subTasks = emptyList()) }
+        _uiState.update {
+            it.copy(
+                selectedTask = null,
+                showTaskDetail = false,
+                showDeleteConfirmation = false,
+                subTasks = emptyList()
+            )
+        }
     }
 
     fun saveTask(task: Task) {
         scope.launch {
             try {
-                taskService.updateTask(task)
+                val updatedTask = taskService.updateTask(task)
                 closeTaskDetail()
-                loadTasks()
+
+                if (updatedTask.plannedDate == null && updatedTask.status != TaskStatus.ARCHIVED) {
+                    _uiState.update { state ->
+                        val existing = state.tasks.find { it.task.id == updatedTask.id }
+                        val replacement = (existing ?: TaskWithTime(
+                            task = updatedTask,
+                            level = TaskLevel.BACKLOG
+                        )).copy(task = updatedTask)
+                        state.copy(tasks = state.tasks.filterNot { it.task.id == updatedTask.id } + replacement)
+                    }
+                    applyFiltersAndSort()
+                } else {
+                    _uiState.update { state ->
+                        val updatedTasks = state.tasks.filterNot { it.task.id == updatedTask.id }
+                        state.copy(tasks = updatedTasks)
+                    }
+                    applyFiltersAndSort()
+                }
             } catch (e: Exception) {
                 logger.error("Failed to save task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -421,7 +467,11 @@ class BacklogViewModel(
                 val taskId = _uiState.value.selectedTask?.id ?: return@launch
                 taskService.deleteTask(taskId)
                 closeTaskDetail()
-                loadTasks()
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.filterNot { it.task.id == taskId }
+                    state.copy(tasks = updatedTasks)
+                }
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to delete task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -435,10 +485,25 @@ class BacklogViewModel(
         scope.launch {
             try {
                 val parentId = _uiState.value.selectedTask?.id ?: return@launch
-                taskService.createSubTask(parentId, title)
-                val subTasks = taskService.getSubTasks(parentId)
-                _uiState.update { it.copy(subTasks = subTasks) }
-                loadTasks()
+                val createdSubTask = taskService.createSubTask(parentId, title)
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.map { taskWithTime ->
+                        if (taskWithTime.task.id != parentId) return@map taskWithTime
+
+                        val newSubTasks = taskWithTime.subTasks + createdSubTask
+                        taskWithTime.copy(
+                            subTasks = newSubTasks,
+                            subTaskCount = newSubTasks.size,
+                            completedSubTaskCount = newSubTasks.count { it.status == TaskStatus.DONE },
+                        )
+                    }
+
+                    state.copy(
+                        tasks = updatedTasks,
+                        subTasks = if (state.selectedTask?.id == parentId) state.subTasks + createdSubTask else state.subTasks,
+                    )
+                }
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to create sub-task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -459,8 +524,28 @@ class BacklogViewModel(
             try {
                 val parentId = parentIdHint ?: taskRepository.findById(subTaskId)?.parentId ?: return@launch
                 taskService.deleteTask(subTaskId)
-                refreshSelectedTaskSubTasks(parentId)
-                loadTasks()
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.map { taskWithTime ->
+                        if (taskWithTime.task.id != parentId) return@map taskWithTime
+
+                        val newSubTasks = taskWithTime.subTasks.filterNot { it.id == subTaskId }
+                        taskWithTime.copy(
+                            subTasks = newSubTasks,
+                            subTaskCount = newSubTasks.size,
+                            completedSubTaskCount = newSubTasks.count { it.status == TaskStatus.DONE },
+                        )
+                    }
+
+                    state.copy(
+                        tasks = updatedTasks,
+                        subTasks = if (state.selectedTask?.id == parentId) {
+                            state.subTasks.filterNot { it.id == subTaskId }
+                        } else {
+                            state.subTasks
+                        },
+                    )
+                }
+                applyFiltersAndSort()
             } catch (e: Exception) {
                 logger.error("Failed to delete sub-task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -506,7 +591,6 @@ class BacklogViewModel(
         scope.launch {
             try {
                 taskService.changeStatus(subTask.id, newStatus)
-                loadTasks()
             } catch (e: Exception) {
                 logger.error("Failed to toggle sub-task status", e)
                 loadTasks()

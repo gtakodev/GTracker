@@ -43,6 +43,19 @@ class SessionEventRepositoryImpl(
             .map { it.toSessionEvent() }
     }
 
+    override suspend fun findBySessionIds(sessionIds: List<UUID>): Map<UUID, List<SessionEvent>> = dbQuery {
+        if (sessionIds.isEmpty()) return@dbQuery emptyMap()
+
+        SessionEventsTable.selectAll()
+            .where { SessionEventsTable.sessionId inList sessionIds.map(UUID::toString) }
+            .orderBy(
+                SessionEventsTable.sessionId to SortOrder.ASC,
+                SessionEventsTable.timestamp to SortOrder.ASC,
+            )
+            .map { it.toSessionEvent() }
+            .groupBy { it.sessionId }
+    }
+
     override suspend fun insert(event: SessionEvent): Unit = dbQuery {
         SessionEventsTable.insert {
             it[id] = event.id.toString()

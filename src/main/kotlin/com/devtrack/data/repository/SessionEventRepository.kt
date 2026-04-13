@@ -9,6 +9,7 @@ import java.util.UUID
 interface SessionEventRepository {
     suspend fun findById(id: UUID): SessionEvent?
     suspend fun findBySessionId(sessionId: UUID): List<SessionEvent>
+    suspend fun findBySessionIds(sessionIds: List<UUID>): Map<UUID, List<SessionEvent>>
     suspend fun insert(event: SessionEvent)
     suspend fun update(event: SessionEvent)
     suspend fun delete(id: UUID)

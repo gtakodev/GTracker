@@ -94,6 +94,15 @@ class TaskRepositoryImpl(
             .map { it.toTask() }
     }
 
+    override suspend fun findByParentIds(parentIds: List<UUID>): Map<UUID, List<Task>> = dbQuery {
+        if (parentIds.isEmpty()) return@dbQuery emptyMap()
+
+        TasksTable.selectAll()
+            .where { TasksTable.parentId inList parentIds.map(UUID::toString) }
+            .map { it.toTask() }
+            .groupBy { it.parentId!! }
+    }
+
     override suspend fun findByStatus(status: TaskStatus): List<Task> = dbQuery {
         TasksTable.selectAll()
             .where { TasksTable.status eq status.name }

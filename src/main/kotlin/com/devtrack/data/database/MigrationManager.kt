@@ -88,6 +88,15 @@ class MigrationManager(private val databaseFactory: DatabaseFactory) {
                 }
             }
         })
+
+        migrations.add(Migration(4, "Add composite indexes for interactive task loading") {
+            transaction(databaseFactory.getDatabase()) {
+                exec("CREATE INDEX IF NOT EXISTS idx_tasks_planned_parent_order ON tasks(planned_date, parent_id, display_order);")
+                exec("CREATE INDEX IF NOT EXISTS idx_work_sessions_end_time ON work_sessions(end_time);")
+                exec("CREATE INDEX IF NOT EXISTS idx_work_sessions_date_task_id ON work_sessions(date, task_id);")
+                exec("CREATE INDEX IF NOT EXISTS idx_session_events_session_timestamp ON session_events(session_id, timestamp);")
+            }
+        })
     }
 
     /**

@@ -324,6 +324,10 @@ class ServiceIntegrationTest {
             val active = sessionService.getActiveSession()
             assertNull(active)
 
+            // Task should return to planned/TODO state once no timer is running
+            val updatedTask = taskRepo.findById(task.id)!!
+            assertEquals(TaskStatus.TODO, updatedTask.status)
+
             taskRepo.delete(task.id)
         }
 

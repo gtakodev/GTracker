@@ -122,6 +122,10 @@ class TodayViewModel(
                 val today = LocalDate.now()
                 val tasks = taskRepository.findByDate(today)
                 val todaySessions = sessionRepository.findByDate(today)
+                val taskIds = tasks.map(Task::id)
+                val sessionsByTaskId = todaySessions.groupBy(WorkSession::taskId)
+                val allEventsMap = eventRepository.findBySessionIds(todaySessions.map(WorkSession::id))
+                val subTasksByParentId = taskRepository.findByParentIds(taskIds)
 
                 // Refresh active session first (needed for level calculation)
                 val active = sessionService.getActiveSession()
@@ -129,12 +133,9 @@ class TodayViewModel(
 
                 // Build TaskWithTime for each task
                 val tasksWithTime = tasks.map { task ->
-                    val taskSessions = todaySessions.filter { it.taskId == task.id }
-                    val eventsMap = taskSessions.associate { session ->
-                        session.id to eventRepository.findBySessionId(session.id)
-                    }
-                    val totalDuration = timeCalculator.calculateTotalForTask(taskSessions, eventsMap)
-                    val subTasks = taskRepository.findByParentId(task.id)
+                    val taskSessions = sessionsByTaskId[task.id].orEmpty()
+                    val totalDuration = timeCalculator.calculateTotalForTask(taskSessions, allEventsMap)
+                    val subTasks = subTasksByParentId[task.id].orEmpty()
 
                     TaskWithTime(
                         task = task,
@@ -148,9 +149,6 @@ class TodayViewModel(
                 }
 
                 // Calculate total time for today across all tasks
-                val allEventsMap = todaySessions.associate { session ->
-                    session.id to eventRepository.findBySessionId(session.id)
-                }
                 val totalTimeToday = timeCalculator.calculateTotalForTask(todaySessions, allEventsMap)
 
                 // Load backlog peek (first 5 unplanned tasks)
@@ -186,6 +184,7 @@ class TodayViewModel(
         scope.launch {
             try {
                 sessionService.startSession(taskId)
+                refreshActiveSession()
                 loadTasks()
             } catch (e: Exception) {
                 logger.error("Failed to start task", e)
@@ -248,7 +247,24 @@ class TodayViewModel(
                 val active = _activeSession.value ?: return@launch
                 sessionService.pauseSession(active.session.id)
                 refreshActiveSession()
-                loadTasks()
+                val refreshedActive = _activeSession.value
+                val refreshedTask = refreshedActive?.task
+
+                if (refreshedTask != null) {
+                    _uiState.update { state ->
+                        val updatedTasks = state.tasks.map { taskWithTime ->
+                            if (taskWithTime.task.id != refreshedTask.id) return@map taskWithTime
+                            taskWithTime.copy(
+                                task = refreshedTask,
+                                level = taskService.getTaskLevel(refreshedTask, refreshedActive.task.id),
+                            )
+                        }
+                        state.copy(
+                            tasks = updatedTasks,
+                            doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 logger.error("Failed to pause session", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -265,7 +281,24 @@ class TodayViewModel(
                 val active = _activeSession.value ?: return@launch
                 sessionService.resumeSession(active.session.id)
                 refreshActiveSession()
-                loadTasks()
+                val refreshedActive = _activeSession.value
+                val refreshedTask = refreshedActive?.task
+
+                if (refreshedTask != null) {
+                    _uiState.update { state ->
+                        val updatedTasks = state.tasks.map { taskWithTime ->
+                            if (taskWithTime.task.id != refreshedTask.id) return@map taskWithTime
+                            taskWithTime.copy(
+                                task = refreshedTask,
+                                level = taskService.getTaskLevel(refreshedTask, refreshedActive.task.id),
+                            )
+                        }
+                        state.copy(
+                            tasks = updatedTasks,
+                            doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 logger.error("Failed to resume session", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -280,9 +313,28 @@ class TodayViewModel(
         scope.launch {
             try {
                 val active = _activeSession.value ?: return@launch
+                val stoppedTaskId = active.task.id
                 sessionService.stopSession(active.session.id)
                 _activeSession.value = null
-                loadTasks()
+
+                val refreshedTask = taskRepository.findById(stoppedTaskId)
+                if (refreshedTask != null) {
+                    _uiState.update { state ->
+                        val updatedTasks = state.tasks.map { taskWithTime ->
+                            if (taskWithTime.task.id != stoppedTaskId) return@map taskWithTime
+                            taskWithTime.copy(
+                                task = refreshedTask,
+                                level = taskService.getTaskLevel(refreshedTask, null),
+                            )
+                        }
+                        state.copy(
+                            tasks = updatedTasks,
+                            doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
+                        )
+                    }
+                } else {
+                    loadTasks()
+                }
             } catch (e: Exception) {
                 logger.error("Failed to stop session", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -303,7 +355,17 @@ class TodayViewModel(
                     _activeSession.value = null
                 }
                 taskService.changeStatus(taskId, TaskStatus.DONE)
-                loadTasks()
+
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.map { taskWithTime ->
+                        if (taskWithTime.task.id != taskId) return@map taskWithTime
+                        taskWithTime.copy(task = taskWithTime.task.copy(status = TaskStatus.DONE))
+                    }
+                    state.copy(
+                        tasks = updatedTasks,
+                        doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
+                    )
+                }
             } catch (e: Exception) {
                 logger.error("Failed to mark task done", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -320,9 +382,21 @@ class TodayViewModel(
                 val title = _uiState.value.quickCreateText.trim()
                 if (title.isBlank()) return@launch
 
-                taskService.createTask(title, LocalDate.now())
-                _uiState.update { it.copy(quickCreateText = "") }
-                loadTasks()
+                val createdTask = taskService.createTask(title, LocalDate.now())
+                val activeTaskId = _activeSession.value?.task?.id
+
+                _uiState.update { state ->
+                    val createdTaskWithTime = TaskWithTime(
+                        task = createdTask,
+                        level = taskService.getTaskLevel(createdTask, activeTaskId),
+                    )
+
+                    state.copy(
+                        tasks = (state.tasks + createdTaskWithTime).sortedBy { it.task.displayOrder },
+                        taskCount = state.taskCount + 1,
+                        quickCreateText = "",
+                    )
+                }
             } catch (e: Exception) {
                 logger.error("Failed to create task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -376,9 +450,44 @@ class TodayViewModel(
     fun saveTask(task: Task) {
         scope.launch {
             try {
-                taskService.updateTask(task)
+                val updatedTask = taskService.updateTask(task)
                 closeTaskDetail()
-                loadTasks()
+
+                val isTodayTask = updatedTask.parentId == null && updatedTask.plannedDate == LocalDate.now()
+                val wasTodayTask = _uiState.value.tasks.any { it.task.id == updatedTask.id }
+
+                when {
+                    isTodayTask -> {
+                        _uiState.update { state ->
+                            val activeTaskId = _activeSession.value?.task?.id
+                            val existing = state.tasks.find { it.task.id == updatedTask.id }
+                            val replacement = (existing ?: TaskWithTime(task = updatedTask)).copy(
+                                task = updatedTask,
+                                level = taskService.getTaskLevel(updatedTask, activeTaskId),
+                            )
+                            val updatedTasks = state.tasks
+                                .filterNot { it.task.id == updatedTask.id }
+                                .plus(replacement)
+                                .sortedBy { it.task.displayOrder }
+
+                            state.copy(
+                                tasks = updatedTasks,
+                                taskCount = updatedTasks.size,
+                                doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
+                            )
+                        }
+                    }
+                    wasTodayTask -> {
+                        _uiState.update { state ->
+                            val updatedTasks = state.tasks.filterNot { it.task.id == updatedTask.id }
+                            state.copy(
+                                tasks = updatedTasks,
+                                taskCount = updatedTasks.size,
+                                doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
+                            )
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 logger.error("Failed to save task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -402,7 +511,19 @@ class TodayViewModel(
                 val taskId = _uiState.value.selectedTask?.id ?: return@launch
                 taskService.deleteTask(taskId)
                 closeTaskDetail()
-                loadTasks()
+
+                if (_activeSession.value?.task?.id == taskId) {
+                    refreshActiveSession()
+                }
+
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.filterNot { it.task.id == taskId }
+                    state.copy(
+                        tasks = updatedTasks,
+                        taskCount = updatedTasks.size,
+                        doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
+                    )
+                }
             } catch (e: Exception) {
                 logger.error("Failed to delete task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -419,11 +540,25 @@ class TodayViewModel(
         scope.launch {
             try {
                 val parentId = _uiState.value.selectedTask?.id ?: return@launch
-                taskService.createSubTask(parentId, title)
-                // Refresh sub-tasks in the dialog
-                val subTasks = taskService.getSubTasks(parentId)
-                _uiState.update { it.copy(subTasks = subTasks) }
-                loadTasks()
+                val createdSubTask = taskService.createSubTask(parentId, title)
+
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.map { taskWithTime ->
+                        if (taskWithTime.task.id != parentId) return@map taskWithTime
+
+                        val newSubTasks = taskWithTime.subTasks + createdSubTask
+                        taskWithTime.copy(
+                            subTasks = newSubTasks,
+                            subTaskCount = newSubTasks.size,
+                            completedSubTaskCount = newSubTasks.count { it.status == TaskStatus.DONE },
+                        )
+                    }
+
+                    state.copy(
+                        tasks = updatedTasks,
+                        subTasks = if (state.selectedTask?.id == parentId) state.subTasks + createdSubTask else state.subTasks,
+                    )
+                }
             } catch (e: Exception) {
                 logger.error("Failed to create sub-task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -447,8 +582,32 @@ class TodayViewModel(
             try {
                 val parentId = parentIdHint ?: taskRepository.findById(subTaskId)?.parentId ?: return@launch
                 taskService.deleteTask(subTaskId)
-                refreshSelectedTaskSubTasks(parentId)
-                loadTasks()
+
+                if (_activeSession.value?.task?.id == subTaskId) {
+                    refreshActiveSession()
+                }
+
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.map { taskWithTime ->
+                        if (taskWithTime.task.id != parentId) return@map taskWithTime
+
+                        val newSubTasks = taskWithTime.subTasks.filterNot { it.id == subTaskId }
+                        taskWithTime.copy(
+                            subTasks = newSubTasks,
+                            subTaskCount = newSubTasks.size,
+                            completedSubTaskCount = newSubTasks.count { it.status == TaskStatus.DONE },
+                        )
+                    }
+
+                    state.copy(
+                        tasks = updatedTasks,
+                        subTasks = if (state.selectedTask?.id == parentId) {
+                            state.subTasks.filterNot { it.id == subTaskId }
+                        } else {
+                            state.subTasks
+                        },
+                    )
+                }
             } catch (e: Exception) {
                 logger.error("Failed to delete sub-task", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -490,7 +649,6 @@ class TodayViewModel(
         scope.launch {
             try {
                 taskService.changeStatus(subTask.id, newStatus)
-                loadTasks()
             } catch (e: Exception) {
                 logger.error("Failed to toggle sub-task status", e)
                 // Revert optimistic update on failure
@@ -673,7 +831,32 @@ class TodayViewModel(
         scope.launch {
             try {
                 taskService.planTask(taskId, LocalDate.now())
-                loadTasks()
+                val plannedTask = taskRepository.findById(taskId) ?: return@launch
+                val subTasks = taskRepository.findByParentId(taskId)
+                val activeTaskId = _activeSession.value?.task?.id
+
+                _uiState.update { state ->
+                    val existing = state.tasks.find { it.task.id == taskId }
+                    val plannedTaskWithTime = (existing ?: TaskWithTime(task = plannedTask, subTasks = subTasks)).copy(
+                        task = plannedTask,
+                        subTasks = if (existing != null) existing.subTasks else subTasks,
+                        subTaskCount = if (existing != null) existing.subTaskCount else subTasks.size,
+                        completedSubTaskCount = if (existing != null) existing.completedSubTaskCount else subTasks.count { it.status == TaskStatus.DONE },
+                        level = taskService.getTaskLevel(plannedTask, activeTaskId),
+                    )
+
+                    val updatedTasks = state.tasks
+                        .filterNot { it.task.id == taskId }
+                        .plus(plannedTaskWithTime)
+                        .sortedBy { it.task.displayOrder }
+
+                    state.copy(
+                        tasks = updatedTasks,
+                        taskCount = updatedTasks.size,
+                        doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
+                        backlogPeek = state.backlogPeek.filterNot { it.task.id == taskId },
+                    )
+                }
             } catch (e: Exception) {
                 logger.error("Failed to plan task for today", e)
                 _uiState.update { it.copy(error = e.message) }
@@ -686,12 +869,23 @@ class TodayViewModel(
      * Called after drag & drop completes with the new ordered list of task IDs.
      */
     fun reorderTasks(orderedTaskIds: List<UUID>) {
+        val orderById = orderedTaskIds.withIndex().associate { (index, taskId) -> taskId to index }
+
+        _uiState.update { state ->
+            state.copy(
+                tasks = state.tasks.map { taskWithTime ->
+                    val newOrder = orderById[taskWithTime.task.id] ?: return@map taskWithTime
+                    taskWithTime.copy(task = taskWithTime.task.copy(displayOrder = newOrder))
+                },
+            )
+        }
+
         scope.launch {
             try {
                 taskService.reorderTasks(orderedTaskIds)
-                loadTasks()
             } catch (e: Exception) {
                 logger.error("Failed to reorder tasks", e)
+                loadTasks()
                 _uiState.update { it.copy(error = e.message) }
             }
         }
@@ -864,8 +1058,26 @@ class TodayViewModel(
     private fun startTimerTicker() {
         timerJob = scope.launch {
             while (isActive) {
-                delay(1000L) // tick every second
-                refreshActiveSession()
+                delay(1000L)
+
+                var elapsedDelta = Duration.ZERO
+                var updateTodayTotal = false
+
+                _activeSession.update { current ->
+                    if (current == null || current.isPaused) return@update current
+
+                    val refreshedDuration = timeCalculator.calculateEffectiveTime(current.events)
+                    val delta = refreshedDuration.minus(current.effectiveDuration)
+                    if (delta.isZero || delta.isNegative) return@update current
+
+                    elapsedDelta = delta
+                    updateTodayTotal = current.session.date == LocalDate.now()
+                    current.copy(effectiveDuration = refreshedDuration)
+                }
+
+                if (!elapsedDelta.isZero && !elapsedDelta.isNegative && updateTodayTotal) {
+                    _uiState.update { it.copy(totalTimeToday = it.totalTimeToday.plus(elapsedDelta)) }
+                }
             }
         }
     }
@@ -910,16 +1122,11 @@ class TodayViewModel(
             val active = sessionService.getActiveSession()
             _activeSession.value = active
 
-            // Update total time as well
-            if (active != null) {
-                val today = LocalDate.now()
-                val todaySessions = sessionRepository.findByDate(today)
-                val allEventsMap = todaySessions.associate { session ->
-                    session.id to eventRepository.findBySessionId(session.id)
-                }
-                val totalTimeToday = timeCalculator.calculateTotalForTask(todaySessions, allEventsMap)
-                _uiState.update { it.copy(totalTimeToday = totalTimeToday) }
-            }
+            val today = LocalDate.now()
+            val todaySessions = sessionRepository.findByDate(today)
+            val allEventsMap = eventRepository.findBySessionIds(todaySessions.map(WorkSession::id))
+            val totalTimeToday = timeCalculator.calculateTotalForTask(todaySessions, allEventsMap)
+            _uiState.update { it.copy(totalTimeToday = totalTimeToday) }
         } catch (e: Exception) {
             logger.error("Failed to refresh active session", e)
         }

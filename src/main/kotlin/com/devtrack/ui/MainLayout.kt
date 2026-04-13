@@ -64,16 +64,21 @@ fun MainLayout(
     val currentScreen by navigationState.currentScreen.collectAsState()
     val isSidebarExpanded by navigationState.isSidebarExpanded.collectAsState()
     val themeMode by navigationState.themeMode.collectAsState()
-    val activeSession by todayViewModel.activeSession.collectAsState()
-    val uiState by todayViewModel.uiState.collectAsState()
     val paletteState by commandPaletteViewModel.uiState.collectAsState()
-    val pomodoroState by todayViewModel.pomodoroState.collectAsState()
 
     // React to command execution reload signals
     LaunchedEffect(Unit) {
         commandPaletteViewModel.reloadSignal.collect {
             todayViewModel.loadTasks()
             backlogViewModel.loadTasks()
+        }
+    }
+
+    LaunchedEffect(currentScreen) {
+        when (currentScreen) {
+            is Screen.Today -> todayViewModel.loadTasks()
+            is Screen.Backlog -> backlogViewModel.loadTasks()
+            else -> Unit
         }
     }
 
@@ -112,10 +117,9 @@ fun MainLayout(
                 }
         ) {
         // Top Bar
-        TopBar(
+        TopBarContainer(
             themeMode = themeMode,
-            activeSession = activeSession,
-            pomodoroState = pomodoroState,
+            todayViewModel = todayViewModel,
             onThemeToggle = {
                 val nextMode = when (themeMode) {
                     ThemeMode.LIGHT -> ThemeMode.DARK
@@ -124,11 +128,6 @@ fun MainLayout(
                 }
                 navigationState.setThemeMode(nextMode)
             },
-            onPauseSession = { todayViewModel.pauseSession() },
-            onResumeSession = { todayViewModel.resumeSession() },
-            onStopSession = { todayViewModel.stopSession() },
-            onPomodoroStop = { todayViewModel.stopPomodoro() },
-            onPomodoroSkip = { todayViewModel.skipPomodoroPhase() },
         )
 
         // Main content area with sidebar
@@ -154,45 +153,13 @@ fun MainLayout(
         }
 
         // Status Bar
-        StatusBar(
-            activeSession = activeSession,
-            totalTimeToday = uiState.totalTimeToday,
-        )
+        StatusBarContainer(todayViewModel = todayViewModel)
         }
 
         // Command Palette overlay
         CommandPalette(viewModel = commandPaletteViewModel)
 
-        // Orphan Session Dialog (P2.4.2) — shown at startup if orphans detected
-        if (uiState.showOrphanDialog) {
-            OrphanSessionDialog(
-                orphanSessions = uiState.orphanSessions,
-                onResolve = { sessionId, resolution ->
-                    when (resolution) {
-                        OrphanResolution.CLOSE_AT_LAST_ACTIVITY ->
-                            todayViewModel.resolveOrphanSession(sessionId, closeAtLastActivity = true)
-                        OrphanResolution.CLOSE_NOW ->
-                            todayViewModel.resolveOrphanSession(sessionId, closeAtLastActivity = false)
-                        OrphanResolution.EDIT_MANUALLY -> {
-                            // TODO: Open ManualSessionEditor for this session (P2.7)
-                            todayViewModel.resolveOrphanSession(sessionId, closeAtLastActivity = true)
-                        }
-                    }
-                },
-                onDismiss = { todayViewModel.dismissOrphanDialog() },
-            )
-        }
-
-        // Inactivity Dialog (P2.4.4) — shown when user is idle with active session
-        if (uiState.showInactivityDialog) {
-            InactivityDialog(
-                taskTitle = uiState.inactiveTaskTitle,
-                inactiveMinutes = uiState.inactiveMinutes,
-                onContinue = { todayViewModel.handleInactivityContinue() },
-                onAutoPause = { todayViewModel.handleInactivityAutoPause() },
-                onStop = { todayViewModel.handleInactivityStop() },
-            )
-        }
+        TodayDialogsHost(todayViewModel = todayViewModel)
 
         // Snackbar for command palette feedback
         SnackbarHost(
@@ -200,6 +167,28 @@ fun MainLayout(
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
         )
     }
+}
+
+@Composable
+private fun TopBarContainer(
+    themeMode: ThemeMode,
+    todayViewModel: TodayViewModel,
+    onThemeToggle: () -> Unit,
+) {
+    val activeSession by todayViewModel.activeSession.collectAsState()
+    val pomodoroState by todayViewModel.pomodoroState.collectAsState()
+
+    TopBar(
+        themeMode = themeMode,
+        activeSession = activeSession,
+        pomodoroState = pomodoroState,
+        onThemeToggle = onThemeToggle,
+        onPauseSession = { todayViewModel.pauseSession() },
+        onResumeSession = { todayViewModel.resumeSession() },
+        onStopSession = { todayViewModel.stopSession() },
+        onPomodoroStop = { todayViewModel.stopPomodoro() },
+        onPomodoroSkip = { todayViewModel.skipPomodoroPhase() },
+    )
 }
 
 @Composable
@@ -437,6 +426,40 @@ private fun ContentArea(
 }
 
 @Composable
+private fun TodayDialogsHost(todayViewModel: TodayViewModel) {
+    val uiState by todayViewModel.uiState.collectAsState()
+
+    if (uiState.showOrphanDialog) {
+        OrphanSessionDialog(
+            orphanSessions = uiState.orphanSessions,
+            onResolve = { sessionId, resolution ->
+                when (resolution) {
+                    OrphanResolution.CLOSE_AT_LAST_ACTIVITY ->
+                        todayViewModel.resolveOrphanSession(sessionId, closeAtLastActivity = true)
+                    OrphanResolution.CLOSE_NOW ->
+                        todayViewModel.resolveOrphanSession(sessionId, closeAtLastActivity = false)
+                    OrphanResolution.EDIT_MANUALLY -> {
+                        // TODO: Open ManualSessionEditor for this session (P2.7)
+                        todayViewModel.resolveOrphanSession(sessionId, closeAtLastActivity = true)
+                    }
+                }
+            },
+            onDismiss = { todayViewModel.dismissOrphanDialog() },
+        )
+    }
+
+    if (uiState.showInactivityDialog) {
+        InactivityDialog(
+            taskTitle = uiState.inactiveTaskTitle,
+            inactiveMinutes = uiState.inactiveMinutes,
+            onContinue = { todayViewModel.handleInactivityContinue() },
+            onAutoPause = { todayViewModel.handleInactivityAutoPause() },
+            onStop = { todayViewModel.handleInactivityStop() },
+        )
+    }
+}
+
+@Composable
 private fun StatusBar(
     activeSession: ActiveSessionState?,
     totalTimeToday: Duration,
@@ -480,6 +503,17 @@ private fun StatusBar(
             )
         }
     }
+}
+
+@Composable
+private fun StatusBarContainer(todayViewModel: TodayViewModel) {
+    val activeSession by todayViewModel.activeSession.collectAsState()
+    val uiState by todayViewModel.uiState.collectAsState()
+
+    StatusBar(
+        activeSession = activeSession,
+        totalTimeToday = uiState.totalTimeToday,
+    )
 }
 
 /**

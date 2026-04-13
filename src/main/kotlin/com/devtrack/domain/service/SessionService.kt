@@ -69,6 +69,9 @@ class SessionService(
         val session = sessionRepository.findById(sessionId) ?: return
         if (session.endTime != null) return // already closed
 
+        val existingEvents = eventRepository.findBySessionId(sessionId)
+        if (existingEvents.lastOrNull()?.type == EventType.PAUSE) return
+
         val now = Instant.now()
         val pauseEvent = SessionEvent(
             sessionId = sessionId,
@@ -92,6 +95,9 @@ class SessionService(
     suspend fun resumeSession(sessionId: UUID) {
         val session = sessionRepository.findById(sessionId) ?: return
         if (session.endTime != null) return // already closed
+
+        val existingEvents = eventRepository.findBySessionId(sessionId)
+        if (existingEvents.lastOrNull()?.type != EventType.PAUSE) return
 
         val now = Instant.now()
         val resumeEvent = SessionEvent(
@@ -126,6 +132,11 @@ class SessionService(
         eventRepository.insert(endEvent)
 
         sessionRepository.update(session.copy(endTime = now))
+
+        val task = taskRepository.findById(session.taskId)
+        if (task != null && task.status == TaskStatus.IN_PROGRESS) {
+            taskRepository.update(task.copy(status = TaskStatus.TODO, updatedAt = now))
+        }
 
         auditLogger.logUserAction("STOP_SESSION", "SESSION", sessionId.toString())
     }
@@ -199,6 +210,11 @@ class SessionService(
         )
         eventRepository.insert(endEvent)
         sessionRepository.update(session.copy(endTime = lastTimestamp))
+
+        val task = taskRepository.findById(session.taskId)
+        if (task != null && task.status == TaskStatus.IN_PROGRESS) {
+            taskRepository.update(task.copy(status = TaskStatus.TODO, updatedAt = lastTimestamp))
+        }
 
         auditLogger.logUserAction("CLOSE_ORPHAN_LAST_ACTIVITY", "SESSION", sessionId.toString(),
             mapOf("endTime" to lastTimestamp.toString()))

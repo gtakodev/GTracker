@@ -45,6 +45,15 @@ class WorkSessionRepositoryImpl(
             .map { it.toWorkSession() }
     }
 
+    override suspend fun findByTaskIds(taskIds: List<UUID>): Map<UUID, List<WorkSession>> = dbQuery {
+        if (taskIds.isEmpty()) return@dbQuery emptyMap()
+
+        WorkSessionsTable.selectAll()
+            .where { WorkSessionsTable.taskId inList taskIds.map(UUID::toString) }
+            .map { it.toWorkSession() }
+            .groupBy { it.taskId }
+    }
+
     override suspend fun findByDate(date: LocalDate): List<WorkSession> = dbQuery {
         WorkSessionsTable.selectAll()
             .where { WorkSessionsTable.date eq date.toString() }

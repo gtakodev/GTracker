@@ -91,16 +91,20 @@ fun TaskCard(
     val isDone = task.status == TaskStatus.DONE
     val canManageSubTasks = taskWithTime.subTasks.isNotEmpty() && onToggleSubTaskDone != null && onDeleteSubTask != null
 
-    // Pulsating border for active task
-    val infiniteTransition = rememberInfiniteTransition()
-    val borderAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse,
-        ),
-    )
+    val borderAlpha = if (isActive && !isPaused) {
+        val infiniteTransition = rememberInfiniteTransition()
+        val animatedBorderAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.4f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000, easing = EaseInOutCubic),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        )
+        animatedBorderAlpha
+    } else {
+        1f
+    }
 
     val borderColor = if (isActive && !isPaused) {
         TimerColors.ActiveLight.copy(alpha = borderAlpha)

@@ -15,6 +15,7 @@ interface TaskRepository {
     suspend fun findBacklog(): List<Task>
     suspend fun findByJiraTicket(ticket: String): List<Task>
     suspend fun findByParentId(parentId: UUID): List<Task>
+    suspend fun findByParentIds(parentIds: List<UUID>): Map<UUID, List<Task>>
     suspend fun findByStatus(status: TaskStatus): List<Task>
     suspend fun findAll(): List<Task>
     suspend fun search(query: String): List<Task>

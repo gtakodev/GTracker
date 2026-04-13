@@ -3,23 +3,29 @@ package com.devtrack.viewmodel
 import com.devtrack.data.repository.SessionEventRepository
 import com.devtrack.data.repository.TaskRepository
 import com.devtrack.data.repository.WorkSessionRepository
-import com.devtrack.domain.model.*
+import com.devtrack.domain.model.Task
+import com.devtrack.domain.model.TaskCategory
+import com.devtrack.domain.model.TaskStatus
 import com.devtrack.domain.service.TaskService
 import com.devtrack.domain.service.TimeCalculator
-import io.mockk.*
+import io.mockk.clearAllMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
-import org.junit.jupiter.api.*
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.assertNotNull
 import org.junit.jupiter.api.assertNull
-import java.time.Duration
-import java.time.Instant
 import java.time.LocalDate
-import java.util.UUID
+import java.util.*
 
 /**
  * Unit tests for BacklogViewModel (P2.1.4).
@@ -45,7 +51,12 @@ class BacklogViewModelTest {
         // Default stubs
         coEvery { taskRepository.findBacklog() } returns emptyList()
         coEvery { taskRepository.findByParentId(any()) } returns emptyList()
+        coEvery { taskRepository.findByParentIds(any()) } answers {
+            firstArg<List<UUID>>().associateWith { emptyList<Task>() }
+        }
         coEvery { sessionRepository.findByTaskId(any()) } returns emptyList()
+        coEvery { sessionRepository.findByTaskIds(any()) } returns emptyMap()
+        coEvery { eventRepository.findBySessionIds(any()) } returns emptyMap()
     }
 
     @AfterEach
@@ -272,6 +283,42 @@ class BacklogViewModelTest {
         advanceUntilIdle()
 
         coVerify { taskService.planTask(task.id, LocalDate.now()) }
+        assertTrue(vm.uiState.value.tasks.none { it.task.id == task.id })
+    }
+
+    @Test
+    fun `batchPlanToday removes selected tasks from backlog state`() = runTest {
+        val task1 = Task(title = "Task 1")
+        val task2 = Task(title = "Task 2")
+        coEvery { taskRepository.findBacklog() } returns listOf(task1, task2)
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.toggleMultiSelectMode()
+        vm.toggleTaskSelection(task1.id)
+        vm.toggleTaskSelection(task2.id)
+
+        vm.batchPlanToday()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.tasks.isEmpty())
+        assertTrue(vm.uiState.value.filteredTasks.isEmpty())
+    }
+
+    @Test
+    fun `quickCreateTask adds task immediately to backlog state`() = runTest {
+        val task = Task(title = "Created now")
+        coEvery { taskService.createTask(any(), isNull()) } returns task
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.updateQuickCreateText("Created now")
+        vm.quickCreateTask()
+        advanceUntilIdle()
+
+        assertEquals(task.id, vm.uiState.value.tasks.firstOrNull()?.task?.id)
     }
 
     @Test

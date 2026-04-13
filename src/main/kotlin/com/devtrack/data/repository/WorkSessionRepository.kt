@@ -10,6 +10,7 @@ import java.util.UUID
 interface WorkSessionRepository {
     suspend fun findById(id: UUID): WorkSession?
     suspend fun findByTaskId(taskId: UUID): List<WorkSession>
+    suspend fun findByTaskIds(taskIds: List<UUID>): Map<UUID, List<WorkSession>>
     suspend fun findByDate(date: LocalDate): List<WorkSession>
     suspend fun findByDateRange(startDate: LocalDate, endDate: LocalDate): List<WorkSession>
     suspend fun findOrphans(): List<WorkSession>
