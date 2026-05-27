@@ -5,7 +5,7 @@ package com.devtrack.domain.model
  *
  * - BACKLOG: No planned date, not archived. Stored in the backlog.
  * - PLANNED: Has a planned date but no active timer.
- * - ACTIVE: Currently has a running session (IN_PROGRESS status).
+ * - ACTIVE: Currently has a running session (DOING status).
  */
 enum class TaskLevel {
     BACKLOG,

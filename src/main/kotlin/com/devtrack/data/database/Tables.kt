@@ -23,6 +23,7 @@ object Tables {
         val jiraTickets = text("jira_tickets").default("[]")  // JSON array
         val status = varchar("status", 30).default("TODO")
         val plannedDate = varchar("planned_date", 10).nullable()  // ISO date
+        val completedAt = varchar("completed_at", 50).nullable()  // ISO instant
         val isTemplate = bool("is_template").default(false)
         val createdAt = varchar("created_at", 50)  // ISO instant
         val updatedAt = varchar("updated_at", 50)  // ISO instant

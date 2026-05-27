@@ -25,7 +25,7 @@ import com.devtrack.ui.theme.TimerColors
 /**
  * Timer widget for the top bar (P1.4.3, P4.4.2).
  * Shows active task name, Jira ticket, HH:MM:SS timer, and pause/resume/stop buttons.
- * Green when active, yellow when paused.
+ * Green when active, yellow when DOING.
  *
  * When Pomodoro mode is active, shows countdown, phase indicator, session counter,
  * and a progress bar with phase-specific colors.

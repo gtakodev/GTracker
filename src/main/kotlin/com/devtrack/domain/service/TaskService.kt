@@ -18,6 +18,7 @@ import java.util.UUID
 class TaskService(
     private val taskRepository: TaskRepository,
     private val sessionService: SessionService,
+    private val sessionRepository: WorkSessionRepository,
     private val jiraTicketParser: JiraTicketParser,
     private val auditLogger: AuditLogger,
 ) {
@@ -63,6 +64,13 @@ class TaskService(
             task.copy(updatedAt = Instant.now())
         }
 
+        if (existing != null && existing.status != updatedTask.status) {
+            taskRepository.update(updatedTask.copy(status = existing.status, completedAt = existing.completedAt))
+            changeStatus(updatedTask.id, updatedTask.status)
+            auditLogger.logUserAction("UPDATE", "TASK", task.id.toString())
+            return taskRepository.findById(updatedTask.id)!!
+        }
+
         taskRepository.update(updatedTask)
         auditLogger.logUserAction("UPDATE", "TASK", task.id.toString())
         return updatedTask
@@ -87,10 +95,45 @@ class TaskService(
      */
     suspend fun changeStatus(id: UUID, status: TaskStatus) {
         val task = taskRepository.findById(id) ?: return
-        val updated = task.copy(status = status, updatedAt = Instant.now())
+
+        val now = Instant.now()
+        if (status == TaskStatus.DONE || status == TaskStatus.ARCHIVED) {
+            val active = sessionService.getActiveSession()
+            if (active != null && active.task.id == id) {
+                sessionService.stopSession(active.session.id)
+            }
+        }
+
+        val completedAt = when (status) {
+            TaskStatus.DONE -> now
+            TaskStatus.TODO, TaskStatus.DOING -> null
+            TaskStatus.ARCHIVED -> null
+        }
+        val reopenedStatus = if (task.status == TaskStatus.DONE || task.status == TaskStatus.ARCHIVED) {
+            when (status) {
+                TaskStatus.TODO, TaskStatus.DOING -> deriveOpenStatus(id)
+                else -> status
+            }
+        } else {
+            status
+        }
+
+        val updated = task.copy(
+            status = reopenedStatus,
+            completedAt = completedAt,
+            updatedAt = now,
+        )
         taskRepository.update(updated)
         auditLogger.logUserAction("CHANGE_STATUS", "TASK", id.toString(),
-            mapOf("status" to status.name))
+            mapOf("status" to updated.status.name))
+    }
+
+    private suspend fun deriveOpenStatus(taskId: UUID): TaskStatus {
+        return if (sessionRepository.findByTaskId(taskId).isEmpty()) {
+            TaskStatus.TODO
+        } else {
+            TaskStatus.DOING
+        }
     }
 
     /**
@@ -177,13 +220,12 @@ class TaskService(
 
     /**
      * Determine the level of a task based on its state (P2.2.1).
-     * - ACTIVE: status is IN_PROGRESS (has a running timer)
+     * - ACTIVE: task has a running timer
      * - PLANNED: has a planned date
      * - BACKLOG: no planned date and not archived
      */
     fun getTaskLevel(task: Task): TaskLevel {
         return when {
-            task.status == TaskStatus.IN_PROGRESS -> TaskLevel.ACTIVE
             task.plannedDate != null -> TaskLevel.PLANNED
             else -> TaskLevel.BACKLOG
         }
@@ -196,7 +238,6 @@ class TaskService(
     fun getTaskLevel(task: Task, activeTaskId: UUID?): TaskLevel {
         return when {
             task.id == activeTaskId -> TaskLevel.ACTIVE
-            task.status == TaskStatus.IN_PROGRESS -> TaskLevel.ACTIVE
             task.plannedDate != null -> TaskLevel.PLANNED
             else -> TaskLevel.BACKLOG
         }

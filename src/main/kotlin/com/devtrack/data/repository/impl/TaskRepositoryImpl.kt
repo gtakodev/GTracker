@@ -36,6 +36,7 @@ class TaskRepositoryImpl(
         jiraTickets = json.decodeFromString(stringListSerializer, this[TasksTable.jiraTickets]),
         status = TaskStatus.valueOf(this[TasksTable.status]),
         plannedDate = this[TasksTable.plannedDate]?.let { LocalDate.parse(it) },
+        completedAt = this[TasksTable.completedAt]?.let { Instant.parse(it) },
         isTemplate = this[TasksTable.isTemplate],
         createdAt = Instant.parse(this[TasksTable.createdAt]),
         updatedAt = Instant.parse(this[TasksTable.updatedAt]),
@@ -75,7 +76,7 @@ class TaskRepositoryImpl(
         TasksTable.selectAll()
             .where {
                 TasksTable.plannedDate.isNull() and
-                    (TasksTable.status neq TaskStatus.ARCHIVED.name) and
+                    (TasksTable.status inList listOf(TaskStatus.TODO.name, TaskStatus.DOING.name)) and
                     TasksTable.parentId.isNull()
             }
             .map { it.toTask() }
@@ -111,7 +112,7 @@ class TaskRepositoryImpl(
 
     override suspend fun findAll(): List<Task> = dbQuery {
         TasksTable.selectAll()
-            .where { (TasksTable.status neq TaskStatus.ARCHIVED.name) and TasksTable.parentId.isNull() }
+            .where { (TasksTable.status inList listOf(TaskStatus.TODO.name, TaskStatus.DOING.name)) and TasksTable.parentId.isNull() }
             .map { it.toTask() }
     }
 
@@ -136,6 +137,7 @@ class TaskRepositoryImpl(
             it[jiraTickets] = json.encodeToString(stringListSerializer, task.jiraTickets)
             it[status] = task.status.name
             it[plannedDate] = task.plannedDate?.toString()
+            it[completedAt] = task.completedAt?.toString()
             it[isTemplate] = task.isTemplate
             it[createdAt] = task.createdAt.toString()
             it[updatedAt] = task.updatedAt.toString()
@@ -152,6 +154,7 @@ class TaskRepositoryImpl(
             it[jiraTickets] = json.encodeToString(stringListSerializer, task.jiraTickets)
             it[status] = task.status.name
             it[plannedDate] = task.plannedDate?.toString()
+            it[completedAt] = task.completedAt?.toString()
             it[isTemplate] = task.isTemplate
             it[updatedAt] = task.updatedAt.toString()
             it[displayOrder] = task.displayOrder

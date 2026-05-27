@@ -273,7 +273,7 @@ class TodayViewModel(
     }
 
     /**
-     * Resume a paused session.
+     * Resume a DOING session.
      */
     fun resumeSession() {
         scope.launch {
@@ -1085,7 +1085,7 @@ class TodayViewModel(
     /**
      * Periodically check for user inactivity (P2.4.3).
      * If the user has been inactive for longer than the threshold
-     * and a session is active (not paused), show the inactivity dialog.
+     * and a session is active (not DOING), show the inactivity dialog.
      */
     private fun startInactivityChecker() {
         inactivityJob = scope.launch {

@@ -84,7 +84,7 @@ class TimeCalculatorTest {
         }
 
         @Test
-        fun `orphan session paused then resumed counts up to now`() {
+        fun `orphan session DOING then resumed counts up to now`() {
             val sid = UUID.randomUUID()
             val events = listOf(
                 event(sid, EventType.START, 0),        // 09:00

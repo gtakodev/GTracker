@@ -208,7 +208,7 @@ class StandupGeneratorTest {
             val tuesday = LocalDate.of(2026, 3, 10)
             val inProgressTask = Task(
                 title = "DPD-500 Active work",
-                status = TaskStatus.IN_PROGRESS,
+                status = TaskStatus.DOING,
                 plannedDate = wednesday,
             )
 

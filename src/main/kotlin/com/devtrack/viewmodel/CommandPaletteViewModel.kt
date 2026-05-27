@@ -304,7 +304,7 @@ class CommandPaletteViewModel(
     }
 
     /**
-     * /resume — Resume the paused session.
+     * /resume — Resume the DOING session.
      */
     private suspend fun executeResume() {
         val active = sessionService.getActiveSession()

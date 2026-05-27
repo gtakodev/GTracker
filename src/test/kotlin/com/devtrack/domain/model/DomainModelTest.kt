@@ -60,9 +60,9 @@ class DomainModelTest {
     inner class TaskStatusTest {
         @Test
         fun `should have 5 statuses`() {
-            assertEquals(5, TaskStatus.entries.size)
+            assertEquals(4, TaskStatus.entries.size)
             assertTrue(TaskStatus.entries.containsAll(
-                listOf(TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.PAUSED, TaskStatus.DONE, TaskStatus.ARCHIVED)
+                listOf(TaskStatus.TODO, TaskStatus.DOING, TaskStatus.DONE, TaskStatus.ARCHIVED)
             ))
         }
     }
@@ -99,6 +99,7 @@ class DomainModelTest {
             assertEquals(TaskCategory.DEVELOPMENT, task.category)
             assertEquals(emptyList<String>(), task.jiraTickets)
             assertEquals(TaskStatus.TODO, task.status)
+            assertNull(task.completedAt)
             assertNull(task.plannedDate)
             assertFalse(task.isTemplate)
             assertNotNull(task.id)

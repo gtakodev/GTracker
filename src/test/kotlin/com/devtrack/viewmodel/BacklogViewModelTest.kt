@@ -383,7 +383,7 @@ class BacklogViewModelTest {
         val state = vm.uiState.value
         assertEquals("", state.searchQuery)
         assertTrue(state.selectedCategories.isEmpty())
-        assertEquals(setOf(TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.PAUSED), state.selectedStatuses)
+        assertEquals(setOf(TaskStatus.TODO, TaskStatus.DOING), state.selectedStatuses)
     }
 
     @Test
@@ -408,7 +408,7 @@ class BacklogViewModelTest {
         val vm = createViewModel()
         advanceUntilIdle()
 
-        // Default statuses: TODO, IN_PROGRESS, PAUSED - DONE is excluded
+        // Default statuses: TODO, DOING, DOING - DONE is excluded
         val state = vm.uiState.value
         assertEquals(1, state.filteredTasks.size)
         assertEquals("Todo task", state.filteredTasks[0].task.title)

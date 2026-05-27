@@ -390,8 +390,8 @@ private fun TimerColorsSection() {
         // Active timer (light)
         TimerColorSwatch("Active (Light)", TimerColors.ActiveLight)
         TimerColorSwatch("Active (Dark)", TimerColors.ActiveDark)
-        TimerColorSwatch("Paused (Light)", TimerColors.PausedLight)
-        TimerColorSwatch("Paused (Dark)", TimerColors.PausedDark)
+        TimerColorSwatch("DOING (Light)", TimerColors.PausedLight)
+        TimerColorSwatch("DOING (Dark)", TimerColors.PausedDark)
     }
 
     Spacer(modifier = Modifier.height(12.dp))
@@ -424,7 +424,7 @@ private fun TimerColorsSection() {
             }
         }
 
-        // Paused timer simulation
+        // DOING timer simulation
         Surface(
             color = TimerColors.PausedLight.copy(alpha = 0.1f),
             shape = RoundedCornerShape(12.dp),

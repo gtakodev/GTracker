@@ -63,7 +63,7 @@ class DatabaseIntegrationTest {
         transaction(databaseFactory.getDatabase()) {
             val versions = SchemaVersionTable.selectAll().toList()
             assertTrue(versions.isNotEmpty())
-            assertEquals(3, versions.maxOf { it[SchemaVersionTable.version] })
+            assertEquals(5, versions.maxOf { it[SchemaVersionTable.version] })
         }
     }
 
@@ -131,7 +131,7 @@ class DatabaseIntegrationTest {
                 it[Tables.TasksTable.id] = tId
                 it[Tables.TasksTable.title] = "Task to delete"
                 it[Tables.TasksTable.category] = "BUGFIX"
-                it[Tables.TasksTable.status] = "IN_PROGRESS"
+                it[Tables.TasksTable.status] = "DOING"
                 it[Tables.TasksTable.jiraTickets] = "[]"
                 it[Tables.TasksTable.createdAt] = now
                 it[Tables.TasksTable.updatedAt] = now

@@ -56,6 +56,7 @@ class DragDropIntegrationTest {
         taskService = TaskService(
             taskRepository = taskRepo,
             sessionService = sessionService,
+            sessionRepository = sessionRepo,
             jiraTicketParser = jiraTicketParser,
             auditLogger = auditLogger,
         )

@@ -107,22 +107,26 @@ class RepositoryIntegrationTest {
         }
 
         @Test
-        fun `findBacklog returns tasks with no planned date excluding archived`() = runTest {
+        fun `findBacklog returns open tasks with no planned date`() = runTest {
             val backlog = Task(title = "Backlog item")
             val planned = Task(title = "Planned item", plannedDate = LocalDate.of(2026, 1, 1))
+            val done = Task(title = "Done item", status = TaskStatus.DONE)
             val archived = Task(title = "Archived item", status = TaskStatus.ARCHIVED)
 
             taskRepo.insert(backlog)
             taskRepo.insert(planned)
+            taskRepo.insert(done)
             taskRepo.insert(archived)
 
             val found = taskRepo.findBacklog()
             assertTrue(found.any { it.id == backlog.id })
             assertFalse(found.any { it.id == planned.id })
+            assertFalse(found.any { it.id == done.id })
             assertFalse(found.any { it.id == archived.id })
 
             taskRepo.delete(backlog.id)
             taskRepo.delete(planned.id)
+            taskRepo.delete(done.id)
             taskRepo.delete(archived.id)
         }
 
@@ -185,7 +189,7 @@ class RepositoryIntegrationTest {
             val updated = task.copy(
                 title = "Updated title",
                 category = TaskCategory.BUGFIX,
-                status = TaskStatus.IN_PROGRESS,
+                status = TaskStatus.DOING,
                 updatedAt = Instant.now(),
             )
             taskRepo.update(updated)
@@ -193,7 +197,7 @@ class RepositoryIntegrationTest {
             val found = taskRepo.findById(task.id)!!
             assertEquals("Updated title", found.title)
             assertEquals(TaskCategory.BUGFIX, found.category)
-            assertEquals(TaskStatus.IN_PROGRESS, found.status)
+            assertEquals(TaskStatus.DOING, found.status)
 
             taskRepo.delete(task.id)
         }

@@ -34,7 +34,7 @@ data class BacklogUiState(
     val error: String? = null,
     val searchQuery: String = "",
     val selectedCategories: Set<TaskCategory> = emptySet(),
-    val selectedStatuses: Set<TaskStatus> = setOf(TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.PAUSED),
+    val selectedStatuses: Set<TaskStatus> = setOf(TaskStatus.TODO, TaskStatus.DOING),
     val sortOption: BacklogSortOption = BacklogSortOption.CREATED_DESC,
     val selectedTaskIds: Set<UUID> = emptySet(),
     val isMultiSelectMode: Boolean = false,
@@ -156,7 +156,7 @@ class BacklogViewModel(
             it.copy(
                 searchQuery = "",
                 selectedCategories = emptySet(),
-                selectedStatuses = setOf(TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.PAUSED),
+                selectedStatuses = setOf(TaskStatus.TODO, TaskStatus.DOING),
             )
         }
         applyFiltersAndSort()

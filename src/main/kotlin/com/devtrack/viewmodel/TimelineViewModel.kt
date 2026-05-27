@@ -31,7 +31,7 @@ data class TimelineBlock(
     val duration: Duration,
     /** Whether this block is a gap (no session). */
     val isGap: Boolean = false,
-    /** Whether this block represents a paused period. */
+    /** Whether this block represents a DOING period. */
     val isPaused: Boolean = false,
     /** The session ID (null for gaps). */
     val sessionId: java.util.UUID? = null,

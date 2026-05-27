@@ -53,7 +53,7 @@ val domainModule = module {
     single { JiraTicketParser() }
     single { TimeCalculator() }
     single { SessionService(get(), get(), get(), get(), get()) }
-    single { TaskService(get(), get(), get(), get()) }
+    single { TaskService(get(), get(), get(), get(), get()) }
     single { CommandPaletteService(get()) }
     // Phase 3: Report data aggregation and ticket aggregation
     single { ReportDataService(get(), get(), get(), get(), get()) }

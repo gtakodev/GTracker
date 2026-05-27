@@ -130,9 +130,12 @@ fun TodayScreen(viewModel: TodayViewModel) {
                 return@Column
             }
 
-            // Separate tasks by status
-            val activeTasks = tasks.filter { it.task.status == TaskStatus.IN_PROGRESS }
-            val todoTasks = tasks.filter { it.task.status == TaskStatus.TODO || it.task.status == TaskStatus.PAUSED }
+            // Separate the currently active timer from the open task lifecycle.
+            val activeTaskId = activeSession?.task?.id
+            val activeTasks = tasks.filter { it.task.id == activeTaskId }
+            val todoTasks = tasks.filter {
+                it.task.id != activeTaskId && (it.task.status == TaskStatus.TODO || it.task.status == TaskStatus.DOING)
+            }
             val doneTasks = tasks.filter { it.task.status == TaskStatus.DONE }
 
             // Combined draggable list: active + todo (P4.1.2)

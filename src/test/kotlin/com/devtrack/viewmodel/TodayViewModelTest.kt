@@ -158,9 +158,9 @@ class TodayViewModelTest {
             effectiveDuration = Duration.ofMinutes(5),
             isPaused = false,
         )
-        val pausedTask = task.copy(status = TaskStatus.PAUSED)
-        val pausedState = activeState.copy(task = pausedTask, isPaused = true)
-        coEvery { sessionService.getActiveSession() } returns activeState andThen pausedState
+        val DOINGTask = task.copy(status = TaskStatus.DOING)
+        val DOINGState = activeState.copy(task = DOINGTask, isPaused = true)
+        coEvery { sessionService.getActiveSession() } returns activeState andThen DOINGState
         coEvery { taskRepository.findByDate(any()) } returns listOf(task)
         coEvery { sessionRepository.findByDate(any()) } returns listOf(session)
         coEvery { eventRepository.findBySessionIds(listOf(session.id)) } returns mapOf(session.id to activeState.events)
@@ -176,7 +176,7 @@ class TodayViewModelTest {
 
         coVerify { sessionService.pauseSession(session.id) }
         assertTrue(vm.activeSession.value?.isPaused == true)
-        assertEquals(TaskStatus.PAUSED, vm.uiState.value.tasks.firstOrNull()?.task?.status)
+        assertEquals(TaskStatus.DOING, vm.uiState.value.tasks.firstOrNull()?.task?.status)
     }
 
     @Test
@@ -191,7 +191,7 @@ class TodayViewModelTest {
             effectiveDuration = Duration.ofMinutes(5),
             isPaused = true,
         )
-        val resumedTask = task.copy(status = TaskStatus.IN_PROGRESS)
+        val resumedTask = task.copy(status = TaskStatus.DOING)
         val resumedState = activeState.copy(task = resumedTask, isPaused = false)
         coEvery { sessionService.getActiveSession() } returns activeState andThen resumedState
         coEvery { taskRepository.findByDate(any()) } returns listOf(task)
@@ -209,7 +209,7 @@ class TodayViewModelTest {
 
         coVerify { sessionService.resumeSession(session.id) }
         assertTrue(vm.activeSession.value?.isPaused == false)
-        assertEquals(TaskStatus.IN_PROGRESS, vm.uiState.value.tasks.firstOrNull()?.task?.status)
+        assertEquals(TaskStatus.DOING, vm.uiState.value.tasks.firstOrNull()?.task?.status)
     }
 
     @Test

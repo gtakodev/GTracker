@@ -50,10 +50,10 @@ class SessionService(
         )
         eventRepository.insert(startEvent)
 
-        // Set task status to IN_PROGRESS
+        // Work has started; pause state remains on session events, not task status.
         val task = taskRepository.findById(taskId)
-        if (task != null && task.status != TaskStatus.IN_PROGRESS) {
-            taskRepository.update(task.copy(status = TaskStatus.IN_PROGRESS, updatedAt = now))
+        if (task != null && task.status == TaskStatus.TODO) {
+            taskRepository.update(task.copy(status = TaskStatus.DOING, updatedAt = now))
         }
 
         auditLogger.logUserAction("START_SESSION", "SESSION", session.id.toString(),
@@ -80,12 +80,6 @@ class SessionService(
         )
         eventRepository.insert(pauseEvent)
 
-        // Set task status to PAUSED
-        val task = taskRepository.findById(session.taskId)
-        if (task != null) {
-            taskRepository.update(task.copy(status = TaskStatus.PAUSED, updatedAt = now))
-        }
-
         auditLogger.logUserAction("PAUSE_SESSION", "SESSION", sessionId.toString())
     }
 
@@ -107,12 +101,6 @@ class SessionService(
         )
         eventRepository.insert(resumeEvent)
 
-        // Set task status back to IN_PROGRESS
-        val task = taskRepository.findById(session.taskId)
-        if (task != null) {
-            taskRepository.update(task.copy(status = TaskStatus.IN_PROGRESS, updatedAt = now))
-        }
-
         auditLogger.logUserAction("RESUME_SESSION", "SESSION", sessionId.toString())
     }
 
@@ -132,11 +120,6 @@ class SessionService(
         eventRepository.insert(endEvent)
 
         sessionRepository.update(session.copy(endTime = now))
-
-        val task = taskRepository.findById(session.taskId)
-        if (task != null && task.status == TaskStatus.IN_PROGRESS) {
-            taskRepository.update(task.copy(status = TaskStatus.TODO, updatedAt = now))
-        }
 
         auditLogger.logUserAction("STOP_SESSION", "SESSION", sessionId.toString())
     }
@@ -211,11 +194,6 @@ class SessionService(
         eventRepository.insert(endEvent)
         sessionRepository.update(session.copy(endTime = lastTimestamp))
 
-        val task = taskRepository.findById(session.taskId)
-        if (task != null && task.status == TaskStatus.IN_PROGRESS) {
-            taskRepository.update(task.copy(status = TaskStatus.TODO, updatedAt = lastTimestamp))
-        }
-
         auditLogger.logUserAction("CLOSE_ORPHAN_LAST_ACTIVITY", "SESSION", sessionId.toString(),
             mapOf("endTime" to lastTimestamp.toString()))
     }
@@ -245,12 +223,6 @@ class SessionService(
             timestamp = pauseTimestamp,
         )
         eventRepository.insert(pauseEvent)
-
-        // Set task to PAUSED
-        val task = taskRepository.findById(session.taskId)
-        if (task != null) {
-            taskRepository.update(task.copy(status = TaskStatus.PAUSED, updatedAt = now))
-        }
 
         auditLogger.logUserAction("AUTO_PAUSE_INACTIVITY", "SESSION", sessionId.toString(),
             mapOf("pauseAt" to pauseTimestamp.toString(), "inactivityMin" to inactivityDurationMinutes.toString()))
@@ -300,6 +272,10 @@ class SessionService(
         )
         eventRepository.insert(startEvent)
         eventRepository.insert(endEvent)
+
+        if (task.status == TaskStatus.TODO) {
+            taskRepository.update(task.copy(status = TaskStatus.DOING, updatedAt = endTime))
+        }
 
         auditLogger.logUserAction("CREATE_MANUAL_SESSION", "SESSION", session.id.toString(),
             mapOf("taskId" to taskId.toString(), "date" to date.toString(),

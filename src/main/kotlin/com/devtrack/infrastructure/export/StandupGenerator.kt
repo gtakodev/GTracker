@@ -114,8 +114,7 @@ class StandupGenerator(
                     tickets.joinToString(", ") { "`$it`" } + " — "
                 } else ""
                 val statusLabel = when (task.status) {
-                    TaskStatus.IN_PROGRESS -> " *(en cours)*"
-                    TaskStatus.PAUSED -> " *(en pause)*"
+                    TaskStatus.DOING -> " *(en cours)*"
                     else -> ""
                 }
                 sb.appendLine("- ${ticketStr}${task.title}${statusLabel}")

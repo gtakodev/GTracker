@@ -5,8 +5,7 @@ package com.devtrack.domain.model
  */
 enum class TaskStatus {
     TODO,
-    IN_PROGRESS,
-    PAUSED,
+    DOING,
     DONE,
     ARCHIVED,
 }

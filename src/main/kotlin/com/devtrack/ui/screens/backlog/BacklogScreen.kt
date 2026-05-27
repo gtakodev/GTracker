@@ -351,7 +351,7 @@ private fun FilterSortBar(
         ) {
             // Status filter chips
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                val statusOptions = listOf(TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.PAUSED, TaskStatus.DONE)
+                val statusOptions = listOf(TaskStatus.TODO, TaskStatus.DOING, TaskStatus.DONE)
                 statusOptions.forEach { status ->
                     val isSelected = status in selectedStatuses
                     FilterChip(

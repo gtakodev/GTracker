@@ -97,6 +97,23 @@ class MigrationManager(private val databaseFactory: DatabaseFactory) {
                 exec("CREATE INDEX IF NOT EXISTS idx_session_events_session_timestamp ON session_events(session_id, timestamp);")
             }
         })
+
+        migrations.add(Migration(5, "Canonical task lifecycle and completion timestamp") {
+            transaction(databaseFactory.getDatabase()) {
+                val completedAtExists = try {
+                    exec("SELECT completed_at FROM tasks LIMIT 1")
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                if (!completedAtExists) {
+                    exec("ALTER TABLE tasks ADD COLUMN completed_at TEXT NULL;")
+                }
+
+                exec("UPDATE tasks SET status = 'DOING' WHERE status IN ('IN_PROGRESS', 'PAUSED');")
+                exec("UPDATE tasks SET completed_at = updated_at WHERE status = 'DONE' AND completed_at IS NULL;")
+            }
+        })
     }
 
     /**

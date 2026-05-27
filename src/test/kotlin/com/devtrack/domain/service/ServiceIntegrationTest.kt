@@ -61,6 +61,7 @@ class ServiceIntegrationTest {
         taskService = TaskService(
             taskRepository = taskRepo,
             sessionService = sessionService,
+            sessionRepository = sessionRepo,
             jiraTicketParser = jiraTicketParser,
             auditLogger = auditLogger,
         )
@@ -122,6 +123,71 @@ class ServiceIntegrationTest {
             taskService.changeStatus(task.id, TaskStatus.DONE)
             val found = taskRepo.findById(task.id)!!
             assertEquals(TaskStatus.DONE, found.status)
+            assertNotNull(found.completedAt)
+
+            taskRepo.delete(task.id)
+        }
+
+        @Test
+        fun `changeStatus closes active session and records completion when done`() = runTest {
+            val task = taskService.createTask("Complete active task")
+            val session = sessionService.startSession(task.id)
+
+            taskService.changeStatus(task.id, TaskStatus.DONE)
+
+            val completed = taskRepo.findById(task.id)!!
+            val closedSession = sessionRepo.findById(session.id)!!
+            assertEquals(TaskStatus.DONE, completed.status)
+            assertNotNull(completed.completedAt)
+            assertNotNull(closedSession.endTime)
+            assertNull(sessionService.getActiveSession())
+
+            taskRepo.delete(task.id)
+        }
+
+        @Test
+        fun `changeStatus closes active session without completion when archived`() = runTest {
+            val task = taskService.createTask("Archive active task")
+            val session = sessionService.startSession(task.id)
+
+            taskService.changeStatus(task.id, TaskStatus.ARCHIVED)
+
+            val archived = taskRepo.findById(task.id)!!
+            val closedSession = sessionRepo.findById(session.id)!!
+            assertEquals(TaskStatus.ARCHIVED, archived.status)
+            assertNull(archived.completedAt)
+            assertNotNull(closedSession.endTime)
+            assertNull(sessionService.getActiveSession())
+
+            taskRepo.delete(task.id)
+        }
+
+        @Test
+        fun `reopening terminal task clears completion and derives doing from history`() = runTest {
+            val task = taskService.createTask("Reopen with history")
+            val session = sessionService.startSession(task.id)
+            sessionService.stopSession(session.id)
+            taskService.changeStatus(task.id, TaskStatus.DONE)
+
+            taskService.changeStatus(task.id, TaskStatus.TODO)
+
+            val reopened = taskRepo.findById(task.id)!!
+            assertEquals(TaskStatus.DOING, reopened.status)
+            assertNull(reopened.completedAt)
+
+            taskRepo.delete(task.id)
+        }
+
+        @Test
+        fun `reopening terminal task without history returns todo`() = runTest {
+            val task = taskService.createTask("Reopen without history")
+            taskService.changeStatus(task.id, TaskStatus.DONE)
+
+            taskService.changeStatus(task.id, TaskStatus.TODO)
+
+            val reopened = taskRepo.findById(task.id)!!
+            assertEquals(TaskStatus.TODO, reopened.status)
+            assertNull(reopened.completedAt)
 
             taskRepo.delete(task.id)
         }
@@ -186,9 +252,9 @@ class ServiceIntegrationTest {
             assertEquals(1, events.size)
             assertEquals(EventType.START, events[0].type)
 
-            // Task should be IN_PROGRESS
+            // Task should be DOING
             val updatedTask = taskRepo.findById(task.id)!!
-            assertEquals(TaskStatus.IN_PROGRESS, updatedTask.status)
+            assertEquals(TaskStatus.DOING, updatedTask.status)
 
             // Cleanup
             sessionService.stopSession(session.id)
@@ -251,7 +317,7 @@ class ServiceIntegrationTest {
 
         @Test
         @Order(5)
-        fun `pauseSession creates PAUSE event and sets task to PAUSED`() = runTest {
+        fun `pauseSession creates PAUSE event and sets task to DOING`() = runTest {
             val task = taskService.createTask("Pause test")
             val session = sessionService.startSession(task.id)
 
@@ -263,11 +329,11 @@ class ServiceIntegrationTest {
             assertEquals(EventType.START, events[0].type)
             assertEquals(EventType.PAUSE, events[1].type)
 
-            // Task status should be PAUSED
+            // Task status should be DOING
             val updatedTask = taskRepo.findById(task.id)!!
-            assertEquals(TaskStatus.PAUSED, updatedTask.status)
+            assertEquals(TaskStatus.DOING, updatedTask.status)
 
-            // Active session should be paused
+            // Active session should be DOING
             val active = sessionService.getActiveSession()
             assertNotNull(active)
             assertTrue(active!!.isPaused)
@@ -279,7 +345,7 @@ class ServiceIntegrationTest {
 
         @Test
         @Order(6)
-        fun `resumeSession creates RESUME event and sets task to IN_PROGRESS`() = runTest {
+        fun `resumeSession creates RESUME event and sets task to DOING`() = runTest {
             val task = taskService.createTask("Resume test")
             val session = sessionService.startSession(task.id)
             sessionService.pauseSession(session.id)
@@ -293,9 +359,9 @@ class ServiceIntegrationTest {
             assertEquals(EventType.PAUSE, events[1].type)
             assertEquals(EventType.RESUME, events[2].type)
 
-            // Task status should be back to IN_PROGRESS
+            // Task status should be back to DOING
             val updatedTask = taskRepo.findById(task.id)!!
-            assertEquals(TaskStatus.IN_PROGRESS, updatedTask.status)
+            assertEquals(TaskStatus.DOING, updatedTask.status)
 
             // Cleanup
             sessionService.stopSession(session.id)
@@ -324,9 +390,9 @@ class ServiceIntegrationTest {
             val active = sessionService.getActiveSession()
             assertNull(active)
 
-            // Task should return to planned/TODO state once no timer is running
+            // Work history keeps the task in Doing after the timer stops.
             val updatedTask = taskRepo.findById(task.id)!!
-            assertEquals(TaskStatus.TODO, updatedTask.status)
+            assertEquals(TaskStatus.DOING, updatedTask.status)
 
             taskRepo.delete(task.id)
         }
@@ -607,9 +673,9 @@ class ServiceIntegrationTest {
             val diffSeconds = kotlin.math.abs(java.time.Duration.between(expectedPauseTime, pauseEvent!!.timestamp).seconds)
             assertTrue(diffSeconds < 5, "Pause timestamp should be ~30min before now, diff was ${diffSeconds}s")
 
-            // Task should be PAUSED
+            // Task should be DOING
             val updatedTask = taskRepo.findById(task.id)!!
-            assertEquals(TaskStatus.PAUSED, updatedTask.status)
+            assertEquals(TaskStatus.DOING, updatedTask.status)
 
             // Cleanup
             sessionService.stopSession(session.id)

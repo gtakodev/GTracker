@@ -17,6 +17,7 @@ data class Task(
     val jiraTickets: List<String> = emptyList(),
     val status: TaskStatus = TaskStatus.TODO,
     val plannedDate: LocalDate? = null,
+    val completedAt: Instant? = null,
     val isTemplate: Boolean = false,
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now(),
