@@ -54,8 +54,11 @@ class TodayViewModelTest {
         clearAllMocks()
 
         // Default stubs
-        coEvery { taskRepository.findByDate(any()) } returns emptyList()
+        coEvery { taskRepository.findAll() } returns emptyList()
         coEvery { taskRepository.findBacklog() } returns emptyList()
+        coEvery { taskRepository.findByStatus(any()) } returns emptyList()
+        coEvery { taskRepository.search(any()) } returns emptyList()
+        coEvery { sessionRepository.findByTaskIds(any()) } returns emptyMap()
         coEvery { taskRepository.findByParentIds(any()) } answers {
             firstArg<List<UUID>>().associateWith { emptyList<Task>() }
         }
@@ -100,10 +103,10 @@ class TodayViewModelTest {
     }
 
     @Test
-    fun `loadTasks populates state with tasks from repository`() = runTest {
-        val task1 = Task(title = "Task 1", plannedDate = LocalDate.now())
-        val task2 = Task(title = "Task 2", plannedDate = LocalDate.now(), status = TaskStatus.DONE)
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task1, task2)
+    fun `loadTasks populates state with open tasks from repository`() = runTest {
+        val task1 = Task(title = "Task 1")
+        val task2 = Task(title = "Task 2", status = TaskStatus.DOING)
+        coEvery { taskRepository.findAll() } returns listOf(task1, task2)
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -111,14 +114,49 @@ class TodayViewModelTest {
         val state = vm.uiState.value
         assertFalse(state.isLoading)
         assertEquals(2, state.taskCount)
-        assertEquals(1, state.doneCount)
+        assertEquals(0, state.doneCount)
         assertEquals(2, state.tasks.size)
         assertNull(state.error)
     }
 
     @Test
+    fun `loadTasks hides terminal tasks by default and exposes them through filter`() = runTest {
+        val todo = Task(title = "Todo task")
+        val doing = Task(title = "Doing task", status = TaskStatus.DOING)
+        val done = Task(title = "Done task", status = TaskStatus.DONE)
+        val archived = Task(title = "Archived task", status = TaskStatus.ARCHIVED)
+        coEvery { taskRepository.findAll() } returns listOf(todo, doing)
+        coEvery { taskRepository.findByStatus(TaskStatus.DONE) } returns listOf(done)
+        coEvery { taskRepository.findByStatus(TaskStatus.ARCHIVED) } returns listOf(archived)
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        assertEquals(listOf(todo.id, doing.id), vm.uiState.value.tasks.map { it.task.id })
+
+        vm.setShowTerminalTasks(true)
+        advanceUntilIdle()
+
+        assertEquals(setOf(todo.id, doing.id, done.id, archived.id), vm.uiState.value.tasks.map { it.task.id }.toSet())
+    }
+
+    @Test
+    fun `search reaches terminal tasks`() = runTest {
+        val done = Task(title = "Done task", status = TaskStatus.DONE)
+        coEvery { taskRepository.search("Done") } returns listOf(done)
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.updateSearchQuery("Done")
+        advanceUntilIdle()
+
+        assertEquals(listOf(done.id), vm.uiState.value.tasks.map { it.task.id })
+    }
+
+    @Test
     fun `loadTasks handles errors gracefully`() = runTest {
-        coEvery { taskRepository.findByDate(any()) } throws RuntimeException("DB error")
+        coEvery { taskRepository.findAll() } throws RuntimeException("DB error")
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -133,7 +171,7 @@ class TodayViewModelTest {
         val taskId = UUID.randomUUID()
         val session = WorkSession(taskId = taskId, date = LocalDate.now(), startTime = Instant.now())
         coEvery { sessionService.startSession(taskId) } returns session
-        coEvery { taskRepository.findByDate(any()) } returns emptyList()
+        coEvery { taskRepository.findAll() } returns emptyList()
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -161,7 +199,8 @@ class TodayViewModelTest {
         val DOINGTask = task.copy(status = TaskStatus.DOING)
         val DOINGState = activeState.copy(task = DOINGTask, isPaused = true)
         coEvery { sessionService.getActiveSession() } returns activeState andThen DOINGState
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
+        coEvery { sessionRepository.findByTaskIds(listOf(task.id)) } returns mapOf(task.id to listOf(session))
         coEvery { sessionRepository.findByDate(any()) } returns listOf(session)
         coEvery { eventRepository.findBySessionIds(listOf(session.id)) } returns mapOf(session.id to activeState.events)
 
@@ -194,7 +233,8 @@ class TodayViewModelTest {
         val resumedTask = task.copy(status = TaskStatus.DOING)
         val resumedState = activeState.copy(task = resumedTask, isPaused = false)
         coEvery { sessionService.getActiveSession() } returns activeState andThen resumedState
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
+        coEvery { sessionRepository.findByTaskIds(any()) } returns mapOf(task.id to listOf(session))
         coEvery { sessionRepository.findByDate(any()) } returns listOf(session)
         coEvery { eventRepository.findBySessionIds(listOf(session.id)) } returns emptyMap()
 
@@ -225,7 +265,7 @@ class TodayViewModelTest {
             isPaused = false,
         )
         coEvery { sessionService.getActiveSession() } returns activeState andThen null
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
         coEvery { taskRepository.findById(taskId) } returns task.copy(status = TaskStatus.TODO)
 
         val vm = createViewModel()
@@ -252,7 +292,7 @@ class TodayViewModelTest {
             isPaused = false,
         )
         coEvery { sessionService.getActiveSession() } returns activeState andThen null
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -265,10 +305,10 @@ class TodayViewModelTest {
     }
 
     @Test
-    fun `quickCreateTask creates task for today and reloads`() = runTest {
-        val task = Task(title = "New task", plannedDate = LocalDate.now())
+    fun `quickCreateTask creates open task and reloads`() = runTest {
+        val task = Task(title = "New task")
         coEvery { taskService.createTask(any(), any()) } returns task
-        coEvery { taskRepository.findByDate(any()) } returns emptyList()
+        coEvery { taskRepository.findAll() } returns emptyList()
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -279,7 +319,7 @@ class TodayViewModelTest {
         vm.quickCreateTask()
         advanceUntilIdle()
 
-        coVerify { taskService.createTask("New task #dev", LocalDate.now()) }
+        coVerify { taskService.createTask("New task #dev", null) }
         assertEquals("", vm.uiState.value.quickCreateText)
     }
 
@@ -316,7 +356,7 @@ class TodayViewModelTest {
     fun `saveTask calls taskService updateTask`() = runTest {
         val task = Task(title = "Test task")
         coEvery { taskService.updateTask(any()) } returns task
-        coEvery { taskRepository.findByDate(any()) } returns emptyList()
+        coEvery { taskRepository.findAll() } returns emptyList()
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -332,7 +372,7 @@ class TodayViewModelTest {
     @Test
     fun `confirmDeleteTask deletes selected task`() = runTest {
         val task = Task(title = "To delete")
-        coEvery { taskRepository.findByDate(any()) } returns emptyList()
+        coEvery { taskRepository.findAll() } returns emptyList()
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -350,7 +390,7 @@ class TodayViewModelTest {
 
     @Test
     fun `dismissError clears error from state`() = runTest {
-        coEvery { taskRepository.findByDate(any()) } throws RuntimeException("Error")
+        coEvery { taskRepository.findAll() } throws RuntimeException("Error")
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -410,10 +450,11 @@ class TodayViewModelTest {
             SessionEvent(sessionId = session.id, type = EventType.END, timestamp = now),
         )
 
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
+        coEvery { sessionRepository.findByTaskIds(listOf(task.id)) } returns mapOf(task.id to listOf(session))
         coEvery { sessionRepository.findByDate(any()) } returns listOf(session)
         coEvery { eventRepository.findBySessionId(session.id) } returns events
-        coEvery { eventRepository.findBySessionIds(listOf(session.id)) } returns mapOf(session.id to events)
+        coEvery { eventRepository.findBySessionIds(any()) } returns mapOf(session.id to events)
         coEvery { sessionService.getActiveSession() } returns null
 
         val vm = createViewModel()
@@ -440,7 +481,7 @@ class TodayViewModelTest {
             isPaused = false,
         )
         coEvery { sessionService.getActiveSession() } returns activeState
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
         coEvery { sessionRepository.findByDate(any()) } returns listOf(session)
         coEvery { eventRepository.findBySessionId(session.id) } returns activeState.events
         coEvery { eventRepository.findBySessionIds(listOf(session.id)) } returns mapOf(session.id to activeState.events)
@@ -608,7 +649,7 @@ class TodayViewModelTest {
         val session = WorkSession(taskId = taskId, date = LocalDate.now(), startTime = Instant.now())
         val activeState = ActiveSessionState(session, task, emptyList(), Duration.ofMinutes(30), false)
         coEvery { sessionService.getActiveSession() } returns activeState
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -629,7 +670,7 @@ class TodayViewModelTest {
         val session = WorkSession(taskId = taskId, date = LocalDate.now(), startTime = Instant.now())
         val activeState = ActiveSessionState(session, task, emptyList(), Duration.ofMinutes(30), false)
         coEvery { sessionService.getActiveSession() } returns activeState andThen null
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -660,9 +701,9 @@ class TodayViewModelTest {
     @Test
     fun `openManualSessionEditor loads tasks and shows dialog`() = runTest {
         val task1 = Task(title = "Task 1", plannedDate = LocalDate.now())
-        val task2 = Task(title = "Task 2")
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task1)
-        coEvery { taskRepository.findBacklog() } returns listOf(task2)
+        val task2 = Task(title = "Task 2", status = TaskStatus.DONE)
+        coEvery { taskRepository.findAll() } returns listOf(task1)
+        coEvery { taskRepository.findByStatus(TaskStatus.DONE) } returns listOf(task2)
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -758,7 +799,7 @@ class TodayViewModelTest {
         coEvery { sessionRepository.findById(session.id) } returns session
         coEvery { sessionService.updateSessionEvents(any(), any()) } returns emptyList()
         coEvery { sessionService.getSessionsForTask(any()) } returns emptyList()
-        coEvery { taskRepository.findByDate(any()) } returns listOf(task)
+        coEvery { taskRepository.findAll() } returns listOf(task)
 
         val vm = createViewModel()
         advanceUntilIdle()

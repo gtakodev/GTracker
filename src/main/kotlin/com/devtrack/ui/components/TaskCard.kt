@@ -89,6 +89,7 @@ fun TaskCard(
 ) {
     val task = taskWithTime.task
     val isDone = task.status == TaskStatus.DONE
+    val isTerminal = task.status == TaskStatus.DONE || task.status == TaskStatus.ARCHIVED
     val canManageSubTasks = taskWithTime.subTasks.isNotEmpty() && onToggleSubTaskDone != null && onDeleteSubTask != null
 
     val borderAlpha = if (isActive && !isPaused) {
@@ -114,7 +115,7 @@ fun TaskCard(
         Color.Transparent
     }
 
-    val cardAlpha = if (isDone) 0.6f else 1f
+    val cardAlpha = if (isTerminal) 0.6f else 1f
 
     Surface(
         modifier = Modifier
@@ -153,10 +154,10 @@ fun TaskCard(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (isDone) {
+                    if (isTerminal) {
                         Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = I18n.t("status.done"),
+                            imageVector = if (isDone) Icons.Filled.CheckCircle else Icons.Filled.Archive,
+                            contentDescription = if (isDone) I18n.t("status.done") else I18n.t("status.archived"),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp),
                         )
@@ -318,7 +319,7 @@ fun TaskCard(
             }
 
             // Action buttons
-            if (!isDone) {
+            if (!isTerminal) {
                 if (isActive) {
                     // Pause/Resume + Stop
                     if (isPaused) {

@@ -23,7 +23,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
- * UI state for the Today screen.
+ * UI state for the Worklist screen.
  */
 data class TodayUiState(
     val tasks: List<TaskWithTime> = emptyList(),
@@ -33,6 +33,8 @@ data class TodayUiState(
     val taskCount: Int = 0,
     val doneCount: Int = 0,
     val quickCreateText: String = "",
+    val searchQuery: String = "",
+    val showTerminalTasks: Boolean = false,
     val selectedTask: Task? = null,
     val showTaskDetail: Boolean = false,
     val showDeleteConfirmation: Boolean = false,
@@ -54,7 +56,7 @@ data class TodayUiState(
 )
 
 /**
- * ViewModel for the Today screen (P1.4.1).
+ * ViewModel for the Worklist screen.
  * Manages task list, active session state, and timer updates.
  *
  * @param coroutineContext optional context override for testing (defaults to Dispatchers.Main)
@@ -106,7 +108,7 @@ class TodayViewModel(
     }
 
     /**
-     * Load tasks planned for today and compute their time data.
+     * Load Worklist tasks and compute their time data.
      *
      * @param showLoading when true, sets isLoading = true so the UI shows a spinner.
      *   Only used for the initial load; background refreshes (e.g. after toggling a
@@ -119,12 +121,17 @@ class TodayViewModel(
                     _uiState.update { it.copy(isLoading = true, error = null) }
                 }
 
+                val state = _uiState.value
+                val searchQuery = state.searchQuery.trim()
+                val showTerminalTasks = state.showTerminalTasks
+                val tasks = loadVisibleTasks(searchQuery, showTerminalTasks)
                 val today = LocalDate.now()
-                val tasks = taskRepository.findByDate(today)
                 val todaySessions = sessionRepository.findByDate(today)
                 val taskIds = tasks.map(Task::id)
-                val sessionsByTaskId = todaySessions.groupBy(WorkSession::taskId)
-                val allEventsMap = eventRepository.findBySessionIds(todaySessions.map(WorkSession::id))
+                val sessionsByTaskId = sessionRepository.findByTaskIds(taskIds)
+                val sessionsForVisibleTasks = sessionsByTaskId.values.flatten()
+                val allSessions = (todaySessions + sessionsForVisibleTasks).distinctBy { it.id }
+                val allEventsMap = eventRepository.findBySessionIds(allSessions.map(WorkSession::id))
                 val subTasksByParentId = taskRepository.findByParentIds(taskIds)
 
                 // Refresh active session first (needed for level calculation)
@@ -148,17 +155,8 @@ class TodayViewModel(
                     )
                 }
 
-                // Calculate total time for today across all tasks
+                // Calculate total time for today across all tasks.
                 val totalTimeToday = timeCalculator.calculateTotalForTask(todaySessions, allEventsMap)
-
-                // Load backlog peek (first 5 unplanned tasks)
-                val backlogTasks = taskRepository.findBacklog()
-                val backlogPeek = backlogTasks.take(5).map { task ->
-                    TaskWithTime(
-                        task = task,
-                        level = TaskLevel.BACKLOG,
-                    )
-                }
 
                 _uiState.update {
                     it.copy(
@@ -167,7 +165,7 @@ class TodayViewModel(
                         taskCount = tasks.size,
                         doneCount = tasks.count { t -> t.status == TaskStatus.DONE },
                         isLoading = false,
-                        backlogPeek = backlogPeek,
+                        backlogPeek = emptyList(),
                     )
                 }
             } catch (e: Exception) {
@@ -175,6 +173,21 @@ class TodayViewModel(
                 _uiState.update { it.copy(isLoading = false, error = e.message ?: "Unknown error") }
             }
         }
+    }
+
+    private suspend fun loadVisibleTasks(searchQuery: String, showTerminalTasks: Boolean): List<Task> {
+        val tasks = when {
+            searchQuery.isNotBlank() -> taskRepository.search(searchQuery)
+            showTerminalTasks -> taskRepository.findAll() +
+                taskRepository.findByStatus(TaskStatus.DONE) +
+                taskRepository.findByStatus(TaskStatus.ARCHIVED)
+            else -> taskRepository.findAll()
+        }
+
+        return tasks
+            .filter { it.parentId == null }
+            .distinctBy { it.id }
+            .sortedBy { it.displayOrder }
     }
 
     /**
@@ -357,12 +370,20 @@ class TodayViewModel(
                 taskService.changeStatus(taskId, TaskStatus.DONE)
 
                 _uiState.update { state ->
-                    val updatedTasks = state.tasks.map { taskWithTime ->
-                        if (taskWithTime.task.id != taskId) return@map taskWithTime
-                        taskWithTime.copy(task = taskWithTime.task.copy(status = TaskStatus.DONE))
-                    }
+                    val updatedTasks = state.tasks
+                        .map { taskWithTime ->
+                            if (taskWithTime.task.id != taskId) return@map taskWithTime
+                            taskWithTime.copy(task = taskWithTime.task.copy(status = TaskStatus.DONE))
+                        }
+                        .filter { taskWithTime ->
+                            state.showTerminalTasks ||
+                                state.searchQuery.isNotBlank() ||
+                                taskWithTime.task.status == TaskStatus.TODO ||
+                                taskWithTime.task.status == TaskStatus.DOING
+                        }
                     state.copy(
                         tasks = updatedTasks,
+                        taskCount = updatedTasks.size,
                         doneCount = updatedTasks.count { it.task.status == TaskStatus.DONE },
                     )
                 }
@@ -374,7 +395,7 @@ class TodayViewModel(
     }
 
     /**
-     * Quick-create a task for today from the title text.
+     * Quick-create an open task from the title text.
      */
     fun quickCreateTask() {
         scope.launch {
@@ -382,7 +403,7 @@ class TodayViewModel(
                 val title = _uiState.value.quickCreateText.trim()
                 if (title.isBlank()) return@launch
 
-                val createdTask = taskService.createTask(title, LocalDate.now())
+                val createdTask = taskService.createTask(title)
                 val activeTaskId = _activeSession.value?.task?.id
 
                 _uiState.update { state ->
@@ -409,6 +430,16 @@ class TodayViewModel(
      */
     fun updateQuickCreateText(text: String) {
         _uiState.update { it.copy(quickCreateText = text) }
+    }
+
+    fun updateSearchQuery(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+        loadTasks()
+    }
+
+    fun setShowTerminalTasks(show: Boolean) {
+        _uiState.update { it.copy(showTerminalTasks = show) }
+        loadTasks()
     }
 
     /**
@@ -453,11 +484,15 @@ class TodayViewModel(
                 val updatedTask = taskService.updateTask(task)
                 closeTaskDetail()
 
-                val isTodayTask = updatedTask.parentId == null && updatedTask.plannedDate == LocalDate.now()
-                val wasTodayTask = _uiState.value.tasks.any { it.task.id == updatedTask.id }
+                val isVisibleTask = updatedTask.parentId == null &&
+                    (updatedTask.status == TaskStatus.TODO ||
+                        updatedTask.status == TaskStatus.DOING ||
+                        _uiState.value.showTerminalTasks ||
+                        _uiState.value.searchQuery.isNotBlank())
+                val wasVisibleTask = _uiState.value.tasks.any { it.task.id == updatedTask.id }
 
                 when {
-                    isTodayTask -> {
+                    isVisibleTask -> {
                         _uiState.update { state ->
                             val activeTaskId = _activeSession.value?.task?.id
                             val existing = state.tasks.find { it.task.id == updatedTask.id }
@@ -477,7 +512,7 @@ class TodayViewModel(
                             )
                         }
                     }
-                    wasTodayTask -> {
+                    wasVisibleTask -> {
                         _uiState.update { state ->
                             val updatedTasks = state.tasks.filterNot { it.task.id == updatedTask.id }
                             state.copy(
@@ -705,10 +740,11 @@ class TodayViewModel(
     fun openManualSessionEditor() {
         scope.launch {
             try {
-                val tasks = taskRepository.findByDate(LocalDate.now()) +
-                    taskRepository.findBacklog()
+                val tasks = taskRepository.findAll() +
+                    taskRepository.findByStatus(TaskStatus.DONE) +
+                    taskRepository.findByStatus(TaskStatus.ARCHIVED)
                 _uiState.update {
-                    it.copy(showManualSessionEditor = true, allTasks = tasks.distinctBy { t -> t.id })
+                    it.copy(showManualSessionEditor = true, allTasks = tasks.filter { t -> t.parentId == null }.distinctBy { t -> t.id })
                 }
             } catch (e: Exception) {
                 logger.error("Failed to open manual session editor", e)

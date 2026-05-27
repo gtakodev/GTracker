@@ -1,10 +1,6 @@
 package com.devtrack.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -15,23 +11,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.devtrack.domain.model.TaskStatus
-import com.devtrack.domain.model.TaskWithTime
 import com.devtrack.ui.components.DragDropLazyColumn
 import com.devtrack.ui.components.TaskCard
 import com.devtrack.ui.components.formatDuration
 import com.devtrack.ui.i18n.I18n
 import com.devtrack.viewmodel.TodayViewModel
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import java.util.UUID
 
 /**
- * Today screen composable (P1.4.4).
- * Shows header with date/count/total, quick-create, and task sections.
+ * Worklist screen composable.
+ * Shows open tasks by default, with search/filter access to terminal tasks.
  */
 @Composable
 fun TodayScreen(viewModel: TodayViewModel) {
@@ -67,7 +58,6 @@ fun TodayScreen(viewModel: TodayViewModel) {
         Column(
             modifier = Modifier.fillMaxSize(),
         ) {
-            // Header
             TodayHeader(
                 taskCount = uiState.taskCount,
                 doneCount = uiState.doneCount,
@@ -78,11 +68,19 @@ fun TodayScreen(viewModel: TodayViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Quick create field
             QuickCreateField(
                 text = uiState.quickCreateText,
                 onTextChange = { viewModel.updateQuickCreateText(it) },
                 onSubmit = { viewModel.quickCreateTask() },
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            WorklistFilters(
+                searchQuery = uiState.searchQuery,
+                showTerminalTasks = uiState.showTerminalTasks,
+                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                onShowTerminalTasksChange = { viewModel.setShowTerminalTasks(it) },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -114,7 +112,7 @@ fun TodayScreen(viewModel: TodayViewModel) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            imageVector = Icons.Filled.CalendarToday,
+                            imageVector = Icons.Filled.Checklist,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier.size(64.dp),
@@ -136,11 +134,11 @@ fun TodayScreen(viewModel: TodayViewModel) {
             val todoTasks = tasks.filter {
                 it.task.id != activeTaskId && (it.task.status == TaskStatus.TODO || it.task.status == TaskStatus.DOING)
             }
-            val doneTasks = tasks.filter { it.task.status == TaskStatus.DONE }
+            val terminalTasks = tasks.filter { it.task.status == TaskStatus.DONE || it.task.status == TaskStatus.ARCHIVED }
 
             // Combined draggable list: active + todo (P4.1.2)
             // Mutable snapshot for drag-and-drop reordering
-            val draggableTasks = (activeTasks + todoTasks).sortedBy { it.task.displayOrder }
+            val draggableTasks = (activeTasks + todoTasks + terminalTasks).sortedBy { it.task.displayOrder }
             var orderedTasks by remember(draggableTasks) { mutableStateOf(draggableTasks) }
 
             DragDropLazyColumn(
@@ -157,24 +155,6 @@ fun TodayScreen(viewModel: TodayViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 footerContent = {
                     Column {
-                        // "Done" section (collapsible)
-                        if (doneTasks.isNotEmpty()) {
-                            DoneSection(
-                                doneTasks = doneTasks,
-                                activeSession = activeSession,
-                                viewModel = viewModel,
-                                expandedTaskIds = expandedTaskIds,
-                            )
-                        }
-
-                        // Backlog peek section (P2.2.3)
-                        if (uiState.backlogPeek.isNotEmpty()) {
-                            BacklogPeekSection(
-                                backlogTasks = uiState.backlogPeek,
-                                onPlanToday = { viewModel.planTaskToday(it) },
-                            )
-                        }
-
                         Spacer(modifier = Modifier.height(16.dp))
                     }
                 },
@@ -258,9 +238,6 @@ fun TodayScreen(viewModel: TodayViewModel) {
 
 @Composable
 private fun TodayHeader(taskCount: Int, doneCount: Int, totalTime: String, onExport: () -> Unit, onAddManualSession: () -> Unit) {
-    val today = LocalDate.now()
-    val dateFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
-
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
@@ -273,7 +250,7 @@ private fun TodayHeader(taskCount: Int, doneCount: Int, totalTime: String, onExp
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = today.format(dateFormatter),
+                text = I18n.t("today.subtitle"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -342,6 +319,60 @@ private fun TodayHeader(taskCount: Int, doneCount: Int, totalTime: String, onExp
 }
 
 @Composable
+private fun WorklistFilters(
+    searchQuery: String,
+    showTerminalTasks: Boolean,
+    onSearchQueryChange: (String) -> Unit,
+    onShowTerminalTasksChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            modifier = Modifier.weight(1f),
+            placeholder = { Text(I18n.t("today.search_placeholder")) },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchQueryChange("") }) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = I18n.t("button.close"),
+                        )
+                    }
+                }
+            },
+            singleLine = true,
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = I18n.t("today.show_terminal"),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Switch(
+                checked = showTerminalTasks,
+                onCheckedChange = onShowTerminalTasksChange,
+            )
+        }
+    }
+}
+
+@Composable
 private fun QuickCreateField(
     text: String,
     onTextChange: (String) -> Unit,
@@ -382,155 +413,4 @@ private fun QuickCreateField(
         singleLine = true,
         shape = MaterialTheme.shapes.medium,
     )
-}
-
-@Composable
-private fun SectionHeader(title: String, count: Int) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Surface(
-            shape = MaterialTheme.shapes.extraSmall,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-        ) {
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DoneSection(
-    doneTasks: List<com.devtrack.domain.model.TaskWithTime>,
-    activeSession: com.devtrack.domain.model.ActiveSessionState?,
-    viewModel: TodayViewModel,
-    expandedTaskIds: MutableMap<UUID, Boolean>,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = { expanded = !expanded },
-                modifier = Modifier.size(24.dp),
-            ) {
-                Icon(
-                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = if (expanded) I18n.t("sidebar.collapse") else I18n.t("sidebar.expand"),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = I18n.t("today.section.done"),
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Surface(
-                shape = MaterialTheme.shapes.extraSmall,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Text(
-                    text = doneTasks.size.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                )
-            }
-        }
-
-        if (expanded) {
-            doneTasks.forEach { taskWithTime ->
-                TaskCard(
-                    taskWithTime = taskWithTime,
-                    onToggleSubTaskDone = { viewModel.toggleSubTaskDone(it) },
-                    onDeleteSubTask = { viewModel.deleteSubTask(it) },
-                    subTasksExpanded = expandedTaskIds[taskWithTime.task.id] == true,
-                    onToggleSubTasksExpanded = { expandedTaskIds[taskWithTime.task.id] = !(expandedTaskIds[taskWithTime.task.id] ?: false) },
-                    onClick = { viewModel.openTaskDetail(taskWithTime.task) },
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        }
-    }
-}
-
-/**
- * Backlog peek section for the Today screen (P2.2.3).
- * Shows the first 5 backlog tasks with a "Plan for today" button.
- */
-@Composable
-private fun BacklogPeekSection(
-    backlogTasks: List<TaskWithTime>,
-    onPlanToday: (java.util.UUID) -> Unit,
-) {
-    Column(
-        modifier = Modifier.padding(top = 12.dp),
-    ) {
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Inbox,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = I18n.t("today.backlog_peek"),
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        backlogTasks.forEach { taskWithTime ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    TaskCard(
-                        taskWithTime = taskWithTime,
-                        onClick = {},
-                    )
-                }
-                IconButton(onClick = { onPlanToday(taskWithTime.task.id) }) {
-                    Icon(
-                        Icons.Filled.Today,
-                        contentDescription = I18n.t("backlog.plan_today"),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-        }
-    }
 }
